@@ -15,7 +15,12 @@ async function loadVersion() {
   try {
     const v = await api("/api/client-version");
     document.getElementById("ver").textContent = `version ${v.version} sha ${String(v.sha256||"").slice(0,12)}`;
-  } catch { document.getElementById("ver").textContent = "no package in /data/dist"; }
+  } catch (e) {
+    const status = document.getElementById("ver");
+    status.textContent = e.message === "no client build published"
+      ? "version.json missing in /data/dist; ZIP download may still be available"
+      : `version info unavailable: ${e.message}`;
+  }
 }
 
 function pct(used, quotaStr, mode) {
