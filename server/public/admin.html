@@ -7,9 +7,12 @@
 <style>
 :root{color-scheme:dark}
 body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#e8e8e8;background:#121212}
-.card{border:1px solid #333;border-radius:10px;padding:12px 16px;margin:12px 0;background:#1c1c1c}
+.card{border:1px solid #333;border-radius:10px;padding:16px 20px;margin:12px 0;background:#1c1c1c}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-table{border-collapse:collapse;width:100%;margin-top:8px}
+.card .row{margin:8px 0}
+.card .row:first-child{margin-top:0}
+table{border-collapse:collapse;width:100%;margin-top:14px}
+.section-label{margin:18px 0 0}
 th,td{border:1px solid #333;padding:6px 8px;font-size:14px;text-align:left}
 th{background:#242424}
 .bar{height:10px;background:#333;border-radius:6px;overflow:hidden;min-width:120px}
@@ -25,19 +28,44 @@ button.danger{background:#c62f2f;color:#fff;border-color:#a00}
 .muted{color:#999;font-size:13px}
 code{background:#242424;padding:1px 6px;border-radius:4px}
 a{color:#7db8ff}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.tab{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;border:1px solid #444;background:#242424;color:#eee;cursor:pointer;font-size:14px}
+.tab:hover{background:#2e2e2e}
+.tab.active{border-color:#7db8ff;background:#26334d}
+.tab .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dot.ok{background:#2a9d48}.dot.lock{background:#e05555}.dot.stale{background:#777}
+.tab .tmin{color:#999;font-size:12px}
+.header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.header h1{margin:12px 0;flex:1}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-overlay[hidden]{display:none}
+.modal{background:#1c1c1c;border:1px solid #444;border-radius:12px;padding:20px 24px;max-width:560px;width:calc(100% - 48px)}
+.modal h2{margin-top:0}
+.modal ol{padding-left:20px;font-size:14px}
+.modal code{background:#242424;padding:1px 6px;border-radius:4px}
 </style>
 </head>
 <body>
-<h1>tooMuch – parent panel</h1>
-<p class="muted">Login: BasicAuth <code>admin / ADMIN_PASSWORD</code>. The browser will ask for the password.</p>
-
-<div class="card">
-  <h3>Windows installer</h3>
-  <div class="row">
-    <button id="dl">Download tooMuch-win-x64.zip</button>
-    <span id="ver" class="muted"></span>
+<div class="header">
+  <h1>tooMuch – parent panel</h1>
+  <button id="open-installer">Client Installer</button>
+</div>
+<div class="modal-overlay" id="installer-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="installer-title">
+    <h2 id="installer-title">Windows client installer</h2>
+    <div class="row">
+      <button id="dl">Download tooMuch-win-x64.zip</button>
+      <span id="ver" class="muted"></span>
+    </div>
+    <ol>
+      <li>Download the zip on the child PC.</li>
+      <li>Unzip it and, as administrator, run:<br><code>install.ps1 -ServerUrl http://raspberrypi.local:3020</code></li>
+      <li>The PC auto-registers here with the 1440m default — then set its limits in its tab.</li>
+    </ol>
+    <div class="row">
+      <button id="close-installer">Close</button>
+    </div>
   </div>
-  <p class="muted">On the child PC: unzip and as admin run <code>install.ps1 -ServerUrl http://raspberrypi.local:3020</code> (auto-register creates the PC with the 1440m default).</p>
 </div>
 
 <div class="card">
@@ -45,6 +73,7 @@ a{color:#7db8ff}
     <button id="refresh">Refresh</button>
     <span id="status" class="muted"></span>
   </div>
+  <div class="tabs" id="tabs"></div>
   <div id="list"></div>
 </div>
 
