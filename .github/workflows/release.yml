@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
       - name: Resolve release tag
@@ -25,7 +25,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "${{ github.ref_name }}" }
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "ver=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
       - run: dotnet publish ./client/TooMuch/TooMuch.csproj -c Release -o ./out
@@ -57,7 +57,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
       - name: Resolve release tag
