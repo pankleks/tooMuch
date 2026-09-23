@@ -1,0 +1,23 @@
+name: e2e
+on:
+  push:
+    branches: [main]
+    paths: ["server/**"]
+  pull_request:
+    paths: ["server/**"]
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npm run build
+        working-directory: server
+      - run: npm run test:e2e
+        working-directory: server

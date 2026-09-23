@@ -1,0 +1,15 @@
+services:
+  server:
+    build: .
+    image: screentime-server:local
+    ports:
+      - "3020:3020"
+    environment:
+      PORT: "3020"
+      DATA_DIR: /data
+      DIST_DIR: /data/dist
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      ALLOW_AUTO_REGISTER: "true"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
