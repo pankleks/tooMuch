@@ -2,11 +2,29 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0 (leave empty when triggered by tag push)"
+        required: false
+        default: ""
 jobs:
   windows-client:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      - name: Resolve release tag
+        id: rel
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "${{ github.ref_name }}" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "ver=$($tag.TrimStart('v'))" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -17,7 +35,7 @@ jobs:
         shell: pwsh
       - run: |
           $sha = (Get-FileHash tooMuch-win-x64.zip -Algorithm SHA256).Hash.ToLower()
-          $ver = "${{ github.ref_name }}".TrimStart("v")
+          $ver = "${{ steps.rel.outputs.ver }}"
           "{`"version`": `"$ver`", `"sha256`": `"$sha`", `"url`": `"/api/admin/client-download`"}" | Out-File version.json -Encoding utf8
         shell: pwsh
       - uses: actions/upload-artifact@v4
@@ -28,6 +46,7 @@ jobs:
             version.json
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.rel.outputs.tag }}
           files: |
             tooMuch-win-x64.zip
             version.json
@@ -39,6 +58,17 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      - name: Resolve release tag
+        id: rel
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG="${{ github.ref_name }}"; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Lowercase image name
+        id: img
+        run: echo "name=${GITHUB_REPOSITORY,,}/toomuch-server" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -51,4 +81,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository }}/toomuch-server:${{ github.ref_name }}
+          tags: ghcr.io/${{ steps.img.outputs.name }}:${{ steps.rel.outputs.tag }}
