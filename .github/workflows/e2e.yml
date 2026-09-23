@@ -1,10 +1,8 @@
 name: e2e
 on:
+  # no paths filter: run on every push so nothing is silently skipped
   push:
-    branches: [main]
-    paths: ["server/**"]
   pull_request:
-    paths: ["server/**"]
 jobs:
   e2e:
     runs-on: ubuntu-latest

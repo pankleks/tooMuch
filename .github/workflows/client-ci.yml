@@ -1,9 +1,9 @@
 name: client-ci
 on:
+  # no paths filter: client tests must run on every push,
+  # otherwise server-only commits silently skip them
   push:
-    paths: ["client/**", ".github/workflows/client-ci.yml"]
   pull_request:
-    paths: ["client/**"]
 jobs:
   build-test:
     # Windows-only: TooMuch.csproj targets net8.0-windows + WinForms
