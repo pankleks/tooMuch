@@ -9,7 +9,7 @@ public class PolicyEvaluatorTests
     {
         var p = new Policy { DeviceId = "pc-test", Version = 1 };
         for (int i = 1; i <= 7; i++)
-            p.Days[String(i)] = new DayConfig { LimitMin = i <= 5 ? 120 : 300 };
+            p.Days[i.ToString()] = new DayConfig { LimitMin = i <= 5 ? 120 : 300 };
         return p;
     }
 
