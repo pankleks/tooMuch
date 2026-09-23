@@ -1,0 +1,5 @@
+node_modules/
+server/dist/
+data/
+*.log
+out/
