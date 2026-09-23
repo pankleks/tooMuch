@@ -1,6 +1,6 @@
-using ScreenTime.Core;
+using TooMuch.Core;
 
-namespace ScreenTime.Tests;
+namespace TooMuch.Tests;
 
 public class PolicyEvaluatorTests
 {

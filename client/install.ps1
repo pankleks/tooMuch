@@ -3,13 +3,13 @@ param(
   [string]$ServerUrl = "http://raspberrypi.local:3020",
   [string]$DeviceId = "",
   [string]$Token = "",
-  [string]$InstallDir = "C:\Program Files\ScreenTime"
+  [string]$InstallDir = "C:\Program Files\TooMuch"
 )
 $ErrorActionPreference = "Stop"
 
-$exe = Join-Path $InstallDir "ScreenTime.exe"
+$exe = Join-Path $InstallDir "TooMuch.exe"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item -Path (Join-Path $PSScriptRoot "ScreenTime.exe") -Destination $exe -Force
+Copy-Item -Path (Join-Path $PSScriptRoot "TooMuch.exe") -Destination $exe -Force
 
 # enrollment: auto-register when DeviceId/Token not given
 if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($Token)) {
@@ -22,11 +22,11 @@ if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($To
 }
 
 # persist for SYSTEM service (HKLM, admin-only) + ProgramData fallback
-New-Item -Path "HKLM:\SOFTWARE\ScreenTime" -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\ScreenTime" -Name "ServerUrl" -Value $ServerUrl -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\ScreenTime" -Name "DeviceId" -Value $DeviceId -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\ScreenTime" -Name "Token" -Value $Token -Force | Out-Null
-$dataDir = "C:\ProgramData\ScreenTime"
+New-Item -Path "HKLM:\SOFTWARE\TooMuch" -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "ServerUrl" -Value $ServerUrl -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "DeviceId" -Value $DeviceId -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "Token" -Value $Token -Force | Out-Null
+$dataDir = "C:\ProgramData\TooMuch"
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 @{ serverUrl = $ServerUrl; deviceId = $DeviceId; token = $Token } | ConvertTo-Json | Out-File (Join-Path $dataDir "device.json") -Encoding utf8
 
@@ -35,14 +35,14 @@ icacls $InstallDir /inheritance:r | Out-Null
 icacls $InstallDir /grant:r "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)R" | Out-Null
 
 # service (SYSTEM, auto, restart on failure)
-$svc = "ScreenTime"
+$svc = "TooMuch"
 sc.exe delete $svc 2>$null | Out-Null
 sc.exe create $svc binPath= "`"$exe`" --service" start= auto obj= LocalSystem | Out-Null
 sc.exe failure $svc reset= 5 actions= restart/5000/restart/5000/restart/5000 | Out-Null
 sc.exe start $svc | Out-Null
 
 # tray autostart for every user
-$task = "ScreenTimeTray"
+$task = "TooMuchTray"
 schtasks /delete /tn $task /f 2>$null | Out-Null
 schtasks /create /tn $task /tr "`"$exe`" --tray" /sc onlogon /rl highest /f | Out-Null
 

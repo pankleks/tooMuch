@@ -10,13 +10,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - run: dotnet publish ./client/ScreenTime/ScreenTime.csproj -c Release -o ./out
+      - run: dotnet publish ./client/TooMuch/TooMuch.csproj -c Release -o ./out
       - run: Copy-Item ./client/install.ps1,./client/uninstall.ps1 ./out/
         shell: pwsh
-      - run: Compress-Archive -Path ./out/* -DestinationPath screentime-win-x64.zip
+      - run: Compress-Archive -Path ./out/* -DestinationPath tooMuch-win-x64.zip
         shell: pwsh
       - run: |
-          $sha = (Get-FileHash screentime-win-x64.zip -Algorithm SHA256).Hash.ToLower()
+          $sha = (Get-FileHash tooMuch-win-x64.zip -Algorithm SHA256).Hash.ToLower()
           $ver = "${{ github.ref_name }}".TrimStart("v")
           "{`"version`": `"$ver`", `"sha256`": `"$sha`", `"url`": `"/api/admin/client-download`"}" | Out-File version.json -Encoding utf8
         shell: pwsh
@@ -24,12 +24,12 @@ jobs:
         with:
           name: windows-client
           path: |
-            screentime-win-x64.zip
+            tooMuch-win-x64.zip
             version.json
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            screentime-win-x64.zip
+            tooMuch-win-x64.zip
             version.json
 
   server-image:
@@ -51,4 +51,4 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/${{ github.repository }}/screentime-server:${{ github.ref_name }}
+          tags: ghcr.io/${{ github.repository }}/toomuch-server:${{ github.ref_name }}

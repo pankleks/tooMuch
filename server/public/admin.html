@@ -1,41 +1,48 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ScreenTime – admin</title>
+<title>tooMuch – admin</title>
 <style>
-body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#111}
-.card{border:1px solid #ddd;border-radius:10px;padding:12px 16px;margin:12px 0}
+:root{color-scheme:dark}
+body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#e8e8e8;background:#121212}
+.card{border:1px solid #333;border-radius:10px;padding:12px 16px;margin:12px 0;background:#1c1c1c}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 table{border-collapse:collapse;width:100%;margin-top:8px}
-th,td{border:1px solid #ddd;padding:6px 8px;font-size:14px;text-align:left}
-.bar{height:10px;background:#eee;border-radius:6px;overflow:hidden;min-width:120px}
+th,td{border:1px solid #333;padding:6px 8px;font-size:14px;text-align:left}
+th{background:#242424}
+.bar{height:10px;background:#333;border-radius:6px;overflow:hidden;min-width:120px}
 .bar>i{display:block;height:100%;background:#2a9d48}
-.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;background:#eee}
-.badge.lock{background:#f3c1c1}.badge.new{background:#ffe08a}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;background:#333;color:#eee}
+.badge.lock{background:#7a1f1f;color:#fff}.badge.new{background:#8a6d1c;color:#fff}
 input[type=number]{width:80px}input[type=text]{width:180px}
-button{padding:6px 12px;border-radius:8px;border:1px solid #999;background:#f6f6f6;cursor:pointer}
+input{background:#242424;color:#eee;border:1px solid #444;border-radius:6px;padding:5px 8px}
+input:disabled{opacity:.45}
+button{padding:6px 12px;border-radius:8px;border:1px solid #555;background:#2a2a2a;color:#eee;cursor:pointer}
+button:hover{background:#383838}
 button.danger{background:#c62f2f;color:#fff;border-color:#a00}
-.muted{color:#666;font-size:13px}
+.muted{color:#999;font-size:13px}
+code{background:#242424;padding:1px 6px;border-radius:4px}
+a{color:#7db8ff}
 </style>
 </head>
 <body>
-<h1>ScreenTime – panel rodzica</h1>
-<p class="muted">Logowanie: BasicAuth <code>admin / ADMIN_PASSWORD</code>. Przeglądarka zapyta o hasło.</p>
+<h1>tooMuch – parent panel</h1>
+<p class="muted">Login: BasicAuth <code>admin / ADMIN_PASSWORD</code>. The browser will ask for the password.</p>
 
 <div class="card">
-  <h3>Instalator Windows</h3>
+  <h3>Windows installer</h3>
   <div class="row">
-    <button id="dl">Pobierz screentime-win-x64.zip</button>
+    <button id="dl">Download tooMuch-win-x64.zip</button>
     <span id="ver" class="muted"></span>
   </div>
-  <p class="muted">Na PC dziecka: rozpakuj i jako admin <code>install.ps1 -ServerUrl http://raspberrypi.local:3020</code> (auto-register utworzy PC z defaultem 1440m).</p>
+  <p class="muted">On the child PC: unzip and as admin run <code>install.ps1 -ServerUrl http://raspberrypi.local:3020</code> (auto-register creates the PC with the 1440m default).</p>
 </div>
 
 <div class="card">
   <div class="row">
-    <button id="refresh">Odśwież</button>
+    <button id="refresh">Refresh</button>
     <span id="status" class="muted"></span>
   </div>
   <div id="list"></div>

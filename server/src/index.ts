@@ -182,13 +182,13 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ---- admin: download installer ----
   app.get("/api/admin/client-download", { onRequest: app.basicAuth }, async (_req, reply) => {
-    const zip = path.join(distDir(), "screentime-win-x64.zip");
+    const zip = path.join(distDir(), "tooMuch-win-x64.zip");
     try {
       await fs.access(zip);
     } catch {
       return reply.code(404).send({ error: "no client build published (copy zip to DIST_DIR)" });
     }
-    return reply.header("content-disposition", 'attachment; filename="screentime-win-x64.zip"').sendFile("screentime-win-x64.zip", distDir());
+    return reply.header("content-disposition", 'attachment; filename="tooMuch-win-x64.zip"').sendFile("tooMuch-win-x64.zip", distDir());
   });
 
   // serve admin page at /admin
@@ -205,5 +205,5 @@ if (process.env.VITEST !== "true" && import.meta.url === `file://${process.argv[
     console.warn("[warn] ADMIN_PASSWORD not set, using default 'changeme' – set it in .env");
   }
   await app.listen({ port: PORT, host: "0.0.0.0" });
-  console.log(`screentime-server listening on :${PORT}`);
+  console.log(`tooMuch-server listening on :${PORT}`);
 }

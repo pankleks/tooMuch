@@ -1,4 +1,4 @@
-namespace ScreenTime.Core;
+namespace TooMuch.Core;
 
 /// <summary>
 /// Pure enforcement logic – no Win32, no I/O. Fully unit-testable on any OS.
@@ -18,29 +18,29 @@ public static class PolicyEvaluator
     public static Decision Evaluate(Policy policy, DateTime localNow, int activeMinToday)
     {
         if (policy.ForceLock)
-            return new Decision(State.Locked, Reason.Force, 0, "Zablokowane przez rodzica");
+            return new Decision(State.Locked, Reason.Force, 0, "Locked by parent");
 
         var wd = IsoWeekday(localNow).ToString();
         if (!policy.Days.TryGetValue(wd, out var day) || day is null)
-            return new Decision(State.Locked, Reason.ConfigMissing, 0, "Brak konfiguracji dnia");
+            return new Decision(State.Locked, Reason.ConfigMissing, 0, "Missing day configuration");
 
         if (day.Windows is { Count: > 0 })
         {
             var now = TimeOnly.FromDateTime(localNow);
             foreach (var w in day.Windows)
                 if (IsInWindow(now, w))
-                    return new Decision(State.Ok, Reason.None, int.MaxValue, "W oknie czasowym");
-            return new Decision(State.Locked, Reason.OutsideWindow, 0, "Poza dozwolonymi godzinami");
+                    return new Decision(State.Ok, Reason.None, int.MaxValue, "Within allowed hours");
+            return new Decision(State.Locked, Reason.OutsideWindow, 0, "Outside allowed hours");
         }
 
         if (day.LimitMin <= 0)
-            return new Decision(State.Locked, Reason.Limit, 0, "Limit na dziś wyczerpany (0)");
+            return new Decision(State.Locked, Reason.Limit, 0, "Daily limit exhausted (0)");
 
         var remaining = day.LimitMin - activeMinToday;
         if (remaining <= 0)
-            return new Decision(State.Locked, Reason.Limit, 0, "Limit na dziś wyczerpany");
+            return new Decision(State.Locked, Reason.Limit, 0, "Daily limit exhausted");
         if (remaining <= 15)
-            return new Decision(State.Warning, Reason.None, remaining, $"Zostało {remaining} min");
-        return new Decision(State.Ok, Reason.None, remaining, $"Zostało {remaining} min");
+            return new Decision(State.Warning, Reason.None, remaining, $"{remaining} min left");
+        return new Decision(State.Ok, Reason.None, remaining, $"{remaining} min left");
     }
 }

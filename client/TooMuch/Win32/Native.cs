@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ScreenTime.Win32;
+namespace TooMuch.Win32;
 
 internal static partial class Native
 {

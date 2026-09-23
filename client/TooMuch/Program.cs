@@ -1,9 +1,9 @@
 using Microsoft.Win32;
-using ScreenTime.Client;
-using ScreenTime.Core;
-using ScreenTime.Win32;
+using TooMuch.Client;
+using TooMuch.Core;
+using TooMuch.Win32;
 
-namespace ScreenTime;
+namespace TooMuch;
 
 // Single exe, two modes: --service (SYSTEM, enforcement) and --tray (user, countdown+overlay).
 internal static class Program
@@ -20,7 +20,7 @@ internal static class Program
         var cfg = LoadConfig();
         if (string.IsNullOrEmpty(cfg.DeviceId) || string.IsNullOrEmpty(cfg.Token))
         {
-            Console.Error.WriteLine("Brak DeviceId/Token. Uruchom install.ps1 jako admin.");
+            Console.Error.WriteLine("Missing DeviceId/Token. Run install.ps1 as administrator.");
             return 2;
         }
         return mode == "service" ? await RunServiceAsync(cfg) : RunTray(cfg);
@@ -32,7 +32,7 @@ internal static class Program
         var cfg = new AgentConfig();
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\ScreenTime");
+            using var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\TooMuch");
             if (key != null)
             {
                 cfg.ServerUrl = (key.GetValue("ServerUrl") as string) ?? cfg.ServerUrl;
@@ -65,7 +65,7 @@ internal static class Program
         var lastBeat = DateTime.MinValue;
         var lastMinute = DateTime.Now;
         var wasLocked = false;
-        Console.WriteLine($"ScreenTime service: {cfg.DeviceId} @ {cfg.ServerUrl}");
+        Console.WriteLine($"tooMuch service: {cfg.DeviceId} @ {cfg.ServerUrl}");
 
         while (!cts.IsCancellationRequested)
         {
@@ -124,12 +124,12 @@ internal static class Program
         var icon = new NotifyIcon
         {
             Visible = true,
-            Text = "ScreenTime",
+            Text = "tooMuch",
             Icon = SystemIcons.Shield,
         };
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Pokaż czas", null, (_, _) =>
-            MessageBox.Show($"Dziś aktywnie: {agent.ActiveMinToday} min", "ScreenTime"));
+        menu.Items.Add("Show time", null, (_, _) =>
+            MessageBox.Show($"Active today: {agent.ActiveMinToday} min", "tooMuch"));
         icon.ContextMenuStrip = menu;
 
         var timer = new System.Windows.Forms.Timer { Interval = 15000 };
@@ -143,17 +143,17 @@ internal static class Program
                 var d = PolicyEvaluator.Evaluate(agent.Policy, DateTime.Now, agent.ActiveMinToday);
                 icon.Text = d.State switch
                 {
-                    State.Locked => "ScreenTime: ZABLOKOWANE",
-                    State.Warning => $"ScreenTime: zostało {d.RemainingMin} min",
-                    _ => d.RemainingMin == int.MaxValue ? "ScreenTime: okno czasowe" : $"ScreenTime: zostało {d.RemainingMin} min",
+                    State.Locked => "tooMuch: LOCKED",
+                    State.Warning => $"tooMuch: {d.RemainingMin} min left",
+                    _ => d.RemainingMin == int.MaxValue ? "tooMuch: within allowed hours" : $"tooMuch: {d.RemainingMin} min left",
                 };
                 if (d.RemainingMin is 15 or 5 or 1)
-                    icon.ShowBalloonTip(10000, "ScreenTime", d.Message, ToolTipIcon.Warning);
+                    icon.ShowBalloonTip(10000, "tooMuch", d.Message, ToolTipIcon.Warning);
                 if (d.State == State.Locked && overlay is null)
                 {
                     overlay = new Form
                     {
-                        Text = "ScreenTime – blokada",
+                        Text = "tooMuch – locked",
                         FormBorderStyle = FormBorderStyle.None,
                         WindowState = FormWindowState.Maximized,
                         TopMost = true,
@@ -165,7 +165,7 @@ internal static class Program
                         TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
                         ForeColor = System.Drawing.Color.White,
                         Font = new System.Drawing.Font("Segoe UI", 20),
-                        Text = $"Komputer zablokowany\n{d.Message}\nZapytaj rodzica.",
+                        Text = $"Computer locked\n{d.Message}\nAsk your parent.",
                     };
                     overlay.Controls.Add(label);
                     overlay.Show();

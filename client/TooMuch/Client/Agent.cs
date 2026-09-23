@@ -1,8 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using ScreenTime.Core;
+using TooMuch.Core;
 
-namespace ScreenTime.Client;
+namespace TooMuch.Client;
 
 public sealed class AgentConfig
 {
@@ -10,7 +10,7 @@ public sealed class AgentConfig
     public string DeviceId { get; set; } = "";
     public string Token { get; set; } = "";
     public string DataDir { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ScreenTime");
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "TooMuch");
 }
 
 /// <summary>

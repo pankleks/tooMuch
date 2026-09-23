@@ -5,10 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>ScreenTime</AssemblyName>
-    <RootNamespace>ScreenTime</RootNamespace>
+    <AssemblyName>TooMuch</AssemblyName>
+    <RootNamespace>TooMuch</RootNamespace>
     <Version>0.1.0</Version>
-    <!-- single exe: 1 binary, 2 modes (--service / --tray) -->
+    <!-- single exe, 1 binary, 2 modes: service and tray -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

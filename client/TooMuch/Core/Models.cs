@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace ScreenTime.Core;
+namespace TooMuch.Core;
 
 public sealed class TimeWindow
 {

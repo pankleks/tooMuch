@@ -6,15 +6,15 @@ on:
     paths: ["client/**"]
 jobs:
   build-test:
-    # Windows-only: ScreenTime.csproj targets net8.0-windows + WinForms
+    # Windows-only: TooMuch.csproj targets net8.0-windows + WinForms
     # (Registry, NotifyIcon, LockWorkStation) so it can neither build
     # reliably nor execute tests on ubuntu. Pure logic is covered by
-    # ScreenTime.Tests running on this same windows runner.
+    # TooMuch.Tests running on this same windows runner.
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - run: dotnet build ./client/ScreenTime/ScreenTime.csproj
-      - run: dotnet test ./client/ScreenTime.Tests/ScreenTime.Tests.csproj
+      - run: dotnet build ./client/TooMuch/TooMuch.csproj
+      - run: dotnet test ./client/TooMuch.Tests/TooMuch.Tests.csproj

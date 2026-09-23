@@ -1,7 +1,7 @@
 services:
   server:
     build: .
-    image: screentime-server:local
+    image: toomuch-server:local
     ports:
       - "3020:3020"
     environment:
