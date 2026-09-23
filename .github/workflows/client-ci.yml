@@ -6,10 +6,11 @@ on:
     paths: ["client/**"]
 jobs:
   build-test:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    # Windows-only: ScreenTime.csproj targets net8.0-windows + WinForms
+    # (Registry, NotifyIcon, LockWorkStation) so it can neither build
+    # reliably nor execute tests on ubuntu. Pure logic is covered by
+    # ScreenTime.Tests running on this same windows runner.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
