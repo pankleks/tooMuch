@@ -1,11 +1,11 @@
-FROM node:22-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app/server
 COPY server/package*.json ./
 RUN npm ci
 COPY server/ ./
 RUN npm run build
 
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /app/server
 ENV NODE_ENV=production PORT=3020 DATA_DIR=/data DIST_DIR=/data/dist
 COPY --from=build /app/server/dist ./dist
