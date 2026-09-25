@@ -24,7 +24,6 @@ describe("api", () => {
     expect(reg.statusCode).toBe(200);
     const { device_id, token } = reg.json();
     expect(device_id).toBe("desktop-jas");
-
     // collision creates suffixed id, does not overwrite
     const reg2 = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "DESKTOP-JAS" } });
     expect(reg2.statusCode).toBe(200);
@@ -40,9 +39,11 @@ describe("api", () => {
     const c304 = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1`, headers: h });
     expect(c304.statusCode).toBe(304);
 
+    // heartbeat "today" must match the server clock (overview keys by current date)
+    const todayStr = new Date().toISOString().slice(0, 10);
     const hb = await app.inject({
       method: "POST", url: "/api/heartbeat", headers: h,
-      payload: { device_id, date: "2026-09-23", active_min: 45, locked: false },
+      payload: { device_id, date: todayStr, active_min: 45, locked: false },
     });
     expect(hb.statusCode).toBe(200);
 
