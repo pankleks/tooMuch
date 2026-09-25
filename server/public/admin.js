@@ -103,8 +103,8 @@ function buildCard(d) {
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
     <div class="row">
       <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
-      <button data-act="del" class="danger">Delete…</button>
       <span class="muted">Windows override the limit. Window format: 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
+      <button data-act="del" class="danger" style="margin-left:auto">Delete</button>
     </div>
     <table><tr><th>Day</th><th>Limit [min]</th><th>Windows</th><th>Mode</th></tr>
     ${[1,2,3,4,5,6,7].map(n=>{
