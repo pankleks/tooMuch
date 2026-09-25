@@ -103,6 +103,7 @@ function buildCard(d) {
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
     <div class="row">
       <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
+      <button data-act="del" class="danger">Delete…</button>
       <span class="muted">Windows override the limit. Window format: 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
     </div>
     <table><tr><th>Day</th><th>Limit [min]</th><th>Windows</th><th>Mode</th></tr>
@@ -134,6 +135,17 @@ function buildCard(d) {
   });
   card.querySelector('[data-act="lock"]').onclick = async ()=>{
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({force_lock: !d.force_lock})});
+    refresh();
+  };
+  card.querySelector('[data-act="del"]').onclick = async ()=>{
+    if (!confirm(`Delete device "${d.name}" (${d.device_id})?\n\nThis removes its config, limits and history. The client on that PC will fail authentication until you reinstall it.`)) return;
+    try {
+      await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"DELETE"});
+    } catch(e){ alert("Delete failed: "+e.message); return; }
+    if (selectedId() === d.device_id) {
+      localStorage.removeItem("toomuch-selected");
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     refresh();
   };
   card.querySelector('[data-act="save"]').onclick = async ()=>{

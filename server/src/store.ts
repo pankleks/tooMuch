@@ -62,6 +62,17 @@ export async function listDevices(dir: string): Promise<DeviceFile[]> {
   return out.sort((a, b) => (a.device_id < b.device_id ? -1 : 1));
 }
 
+/** Delete a device file. Returns false when it does not exist. */
+export async function deleteDevice(dir: string, deviceId: string): Promise<boolean> {
+  try {
+    await fs.unlink(filePath(dir, deviceId));
+    return true;
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return false;
+    throw e;
+  }
+}
+
 export interface RegisterResult {
   created: boolean;
   device: DeviceFile;

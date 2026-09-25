@@ -10,6 +10,7 @@ import {
   listDevices,
   loadDevice,
   saveDevice,
+  deleteDevice,
   registerDevice,
   recordHeartbeat,
   applyConfigUpdate,
@@ -177,6 +178,22 @@ export async function buildApp(): Promise<FastifyInstance> {
       if (res.error) return reply.code(400).send({ error: res.error });
       await saveDevice(dataDir(), device);
       return reply.send({ ok: true, version: device.config.version, config: device.config });
+    }
+  );
+
+  // ---- admin: delete device ----
+  app.delete<{ Params: { id: string } }>(
+    "/api/admin/devices/:id",
+    { onRequest: app.basicAuth },
+    async (req, reply) => {
+      let deleted: boolean;
+      try {
+        deleted = await deleteDevice(dataDir(), req.params.id);
+      } catch {
+        return reply.code(400).send({ error: "bad device id" });
+      }
+      if (!deleted) return reply.code(404).send({ error: "not found" });
+      return reply.send({ ok: true });
     }
   );
 

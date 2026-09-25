@@ -96,4 +96,27 @@ describe("api", () => {
     const r = await app.inject({ method: "GET", url: `/api/config/${device_id}`, headers: { "x-device-token": "bad" } });
     expect(r.statusCode).toBe(401);
   });
+
+  it("admin can delete device", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "pc-del" } });
+    const { device_id } = reg.json();
+    const cred = Buffer.from("admin:test-admin").toString("base64");
+    const auth = { authorization: `Basic ${cred}` };
+
+    const del = await app.inject({ method: "DELETE", url: `/api/admin/devices/${device_id}`, headers: auth });
+    expect(del.statusCode).toBe(200);
+    expect(del.json()).toEqual({ ok: true });
+
+    const again = await app.inject({ method: "DELETE", url: `/api/admin/devices/${device_id}`, headers: auth });
+    expect(again.statusCode).toBe(404);
+
+    const ov = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    expect(ov.json().devices.some((d: { device_id: string }) => d.device_id === device_id)).toBe(false);
+
+    const bad = await app.inject({ method: "DELETE", url: "/api/admin/devices/..%2Fevil", headers: auth });
+    expect(bad.statusCode).toBe(400);
+
+    const noAuth = await app.inject({ method: "DELETE", url: `/api/admin/devices/${device_id}` });
+    expect(noAuth.statusCode).toBe(401);
+  });
 });
