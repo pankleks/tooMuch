@@ -14,10 +14,13 @@ import {
   registerDevice,
   recordHeartbeat,
   applyConfigUpdate,
+  dailyBonusMin,
   resnapshotToday,
+  snapshotQuota,
+  weekdayOf,
 } from "./store.js";
 import { validateDays } from "./types.js";
-import { recentDates, timeZone } from "./clock.js";
+import { localDate, recentDates, timeZone } from "./clock.js";
 import { randomUUID } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 3020);
@@ -106,11 +109,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   );
 
   // ---- device: poll config ----
-  app.get("/api/config/:id", async (req: FastifyRequest<{ Params: { id: string }; Querystring: { v?: string; tz?: string } }>, reply: FastifyReply) => {
+  app.get("/api/config/:id", async (req: FastifyRequest<{ Params: { id: string }; Querystring: { v?: string; tz?: string; date?: string } }>, reply: FastifyReply) => {
     const device = await deviceAuth(req, req.params.id);
     if (!device) return reply.code(401).send({ error: "unauthorized" });
     const v = Number(req.query.v ?? -1);
-    if (v === device.config.version && req.query.tz === timeZone()) return reply.code(304).send();
+    const today = localDate();
+    if (v === device.config.version && req.query.tz === timeZone() && (!req.query.date || req.query.date === today))
+      return reply.code(304).send();
+    const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
+    const mode = day.windows.length > 0 ? "window" : "limit";
     return reply.send({
       device_id: device.device_id,
       time_zone: timeZone(),
@@ -119,6 +126,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       idle_threshold_sec: device.config.idle_threshold_sec,
       count_only_active: device.config.count_only_active,
       days: device.config.days,
+      daily_bonus_date: today,
+      daily_bonus_min: mode === "limit" ? dailyBonusMin(device, today) : 0,
     });
   });
 
@@ -210,19 +219,28 @@ export async function buildApp(): Promise<FastifyInstance> {
     const days = recentDates();
     return {
       time_zone: timeZone(),
-      devices: devices.map((d) => ({
-        device_id: d.device_id,
-        name: d.name,
-        last_seen: d.last_seen,
-        version: d.config.version,
-        force_lock: d.config.force_lock,
-        locked: d.locked ?? null,
-        counting: d.counting ?? null,
-        today: d.usage[days[0]] ?? null,
-        last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
-        config: d.config,
-        messages: (d.messages ?? []).map(m => ({ ...m, status: m.status !== "confirmed" && Date.parse(m.expires_at) <= Date.now() ? "expired" : m.status })),
-      })),
+      devices: devices.map((d) => {
+        const today = days[0];
+        const day = d.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
+        const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
+        const bonusMin = mode === "limit" ? dailyBonusMin(d, today) : 0;
+        return {
+          device_id: d.device_id,
+          name: d.name,
+          last_seen: d.last_seen,
+          version: d.config.version,
+          force_lock: d.config.force_lock,
+          locked: d.locked ?? null,
+          counting: d.counting ?? null,
+          today: d.usage[today] ?? null,
+          today_mode: mode,
+          today_bonus_min: bonusMin,
+          today_quota: snapshotQuota(day, mode, bonusMin),
+          last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
+          config: d.config,
+          messages: (d.messages ?? []).map(m => ({ ...m, status: m.status !== "confirmed" && Date.parse(m.expires_at) <= Date.now() ? "expired" : m.status })),
+        };
+      }),
     };
   });
 
@@ -245,6 +263,36 @@ export async function buildApp(): Promise<FastifyInstance> {
       resnapshotToday(device);
       await saveDevice(dataDir(), device);
       return reply.send({ ok: true, version: device.config.version, config: device.config });
+    }
+  );
+
+  // ---- admin: grant extra daily-limit time for today only ----
+  app.post<{ Params: { id: string }; Body: { minutes: number } }>(
+    "/api/admin/devices/:id/daily-bonus",
+    {
+      onRequest: app.basicAuth,
+      schema: {
+        body: {
+          type: "object",
+          required: ["minutes"],
+          additionalProperties: false,
+          properties: { minutes: { type: "integer", enum: [15, 30, 60] } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const device = await loadDevice(dataDir(), req.params.id);
+      if (!device) return reply.code(404).send({ error: "not found" });
+      const today = localDate();
+      const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
+      if (day.windows.length > 0)
+        return reply.code(409).send({ error: "Extra time applies only to daily-limit schedules, not time windows." });
+      device.daily_bonuses ??= {};
+      device.daily_bonuses[today] = dailyBonusMin(device, today) + req.body.minutes;
+      device.config.version += 1;
+      resnapshotToday(device);
+      await saveDevice(dataDir(), device);
+      return reply.send({ ok: true, date: today, daily_bonus_min: device.daily_bonuses[today], version: device.config.version });
     }
   );
 

@@ -22,6 +22,8 @@ public sealed class Policy
     [JsonPropertyName("force_lock")] public bool ForceLock { get; set; }
     [JsonPropertyName("idle_threshold_sec")] public int IdleThresholdSec { get; set; } = 180;
     [JsonPropertyName("count_only_active")] public bool CountOnlyActive { get; set; } = true;
+    [JsonPropertyName("daily_bonus_date")] public string DailyBonusDate { get; set; } = "";
+    [JsonPropertyName("daily_bonus_min")] public int DailyBonusMin { get; set; }
     [JsonPropertyName("days")] public Dictionary<string, DayConfig> Days { get; set; } = new();
 }
 

@@ -22,9 +22,24 @@ public class TimeWarningTests
     }
 
     [Fact]
+    public void DailyWarningUsesTheBonusAdjustedLimit()
+    {
+        var policy = Policy();
+        policy.DailyBonusDate = "2026-09-21";
+        policy.DailyBonusMin = 30;
+
+        Assert.Null(TimeWarning.Evaluate(policy, Monday, 50 * 60));
+        var warning = TimeWarning.Evaluate(policy, Monday, 80 * 60)!;
+        Assert.Equal(10, warning.Minutes);
+        Assert.Equal("2026-09-21:limit:90", warning.Key);
+    }
+
+    [Fact]
     public void WindowWarnsBeforeEndRegardlessOfUsage()
     {
         var policy = Policy();
+        policy.DailyBonusDate = "2026-09-21";
+        policy.DailyBonusMin = 60;
         policy.Days["1"].Windows.Add(new() { From = "16:00", To = "17:00" });
         Assert.Null(TimeWarning.Evaluate(policy, Monday.AddMinutes(49), 99999));
         Assert.Equal(10, TimeWarning.Evaluate(policy, Monday.AddMinutes(50), 99999)!.Minutes);

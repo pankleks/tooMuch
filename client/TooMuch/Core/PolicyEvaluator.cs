@@ -15,6 +15,13 @@ public static class PolicyEvaluator
         return from <= now && now < to;
     }
 
+    public static int EffectiveDailyLimitMin(Policy policy, DateTime localNow, DayConfig day)
+    {
+        if (day.Windows.Count > 0 || policy.DailyBonusDate != localNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))
+            return day.LimitMin;
+        return day.LimitMin + Math.Max(0, policy.DailyBonusMin);
+    }
+
     public static Decision Evaluate(Policy policy, DateTime localNow, int activeMinToday)
     {
         if (policy.ForceLock)
@@ -33,10 +40,11 @@ public static class PolicyEvaluator
             return new Decision(State.Locked, Reason.OutsideWindow, 0, "Outside allowed hours");
         }
 
-        if (day.LimitMin <= 0)
+        var limitMin = EffectiveDailyLimitMin(policy, localNow, day);
+        if (limitMin <= 0)
             return new Decision(State.Locked, Reason.Limit, 0, "Daily limit exhausted (0)");
 
-        var remaining = day.LimitMin - activeMinToday;
+        var remaining = limitMin - activeMinToday;
         if (remaining <= 0)
             return new Decision(State.Locked, Reason.Limit, 0, "Daily limit exhausted");
         if (remaining <= 15)

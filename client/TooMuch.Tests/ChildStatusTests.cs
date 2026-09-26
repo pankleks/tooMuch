@@ -22,6 +22,15 @@ public class ChildStatusTests
     }
 
     [Fact]
+    public void DailyStatusShowsBonusAdjustedRemainingTime()
+    {
+        var policy = new Policy { Days = new() { ["1"] = new() { LimitMin = 90 } }, DailyBonusDate = "2026-09-21", DailyBonusMin = 30 };
+        var status = ChildStatus.Create(policy, Monday, 90 * 60, DateTimeOffset.UnixEpoch);
+        Assert.Equal("Available", status.State);
+        Assert.Equal(30 * 60, status.RemainingSeconds);
+    }
+
+    [Fact]
     public void WindowShowsTimeUntilCombinedAdjacentWindowEnds()
     {
         var policy = new Policy { Days = new() { ["1"] = new() { Windows = new()

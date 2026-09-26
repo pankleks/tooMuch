@@ -34,7 +34,8 @@ public sealed record ChildStatus(
                 Math.Max(0, (end.ToTimeSpan() - localNow.TimeOfDay).TotalSeconds), end.ToString("HH:mm"), updatedAtUtc);
         }
 
-        var remaining = Math.Max(0, day.LimitMin * 60d - usedSeconds);
+        var limitMin = PolicyEvaluator.EffectiveDailyLimitMin(policy, localNow, day);
+        var remaining = Math.Max(0, limitMin * 60d - usedSeconds);
         return decision.State == global::TooMuch.Core.State.Locked
             ? new("Blocked", "Daily time limit reached", "Daily limit", usedSeconds, 0, null, updatedAtUtc)
             : new("Available", "Daily limit", "Daily limit", usedSeconds, remaining, null, updatedAtUtc);

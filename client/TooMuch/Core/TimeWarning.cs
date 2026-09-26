@@ -21,8 +21,9 @@ public sealed record TimeWarning(string Key, int Minutes)
         }
         else
         {
-            remaining = day.LimitMin - usedSeconds / 60;
-            rule = $"limit:{day.LimitMin}";
+            var limitMin = PolicyEvaluator.EffectiveDailyLimitMin(policy, now, day);
+            remaining = limitMin - usedSeconds / 60;
+            rule = $"limit:{limitMin}";
         }
         if (remaining <= 0 || remaining > 10) return null;
         return new TimeWarning($"{now:yyyy-MM-dd}:{rule}", (int)Math.Ceiling(remaining));

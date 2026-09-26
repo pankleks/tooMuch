@@ -26,6 +26,7 @@ export interface UsageEntry {
 
 export interface DeviceFile {
   messages?: ParentMessage[];
+  daily_bonuses?: Record<string, number>; // per-date extra daily-limit minutes; never changes the recurring config
   device_id: string;
   name: string;
   token: string; // hex, stored plain on server (LAN home use); clients send via X-Device-Token

@@ -60,6 +60,7 @@ For upgrades, extract the new release and run `install.ps1` again with the same 
 ## Features
 
 - Per-device weekday limits and allowed time windows, edited in the admin panel.
+- Parents can add 15m, 30m, or 1h to a device's daily limit for today only; this never changes scheduled time windows.
 - Active time is counted for the selected child's unlocked Windows session, including watching videos without input. Locked sessions, sleep, and other accounts are excluded.
 - At the limit or outside an allowed window, the service disconnects the child's Windows session. Running apps remain open; signing in again disconnects the session while access is still blocked. This is not a Windows logon prohibition.
 - A ten-minute warning before a daily limit or allowed-window end.

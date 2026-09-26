@@ -115,7 +115,10 @@ a{color:#7db8ff}
     </div>
     <ol>
       <li>Download the zip on the child PC.</li>
-      <li>Unzip it and, as administrator, run:<br><code id="installer-cmd">.\install.ps1 -ServerUrl …</code></li>
+      <li>Unzip it and open PowerShell as administrator in the extracted folder.</li>
+      <li>Enable locally created scripts for your account: run <code>Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</code> and enter <code>Y</code> if prompted.</li>
+      <li>If PowerShell says the installer is not digitally signed, run <code>Unblock-File .\install.ps1</code> (only for a ZIP from a source you trust).</li>
+      <li>Run the installer:<br><code id="installer-cmd">.\install.ps1 -ServerUrl …</code></li>
       <li>The PC auto-registers here with the 1440m default — then set its limits in its tab.</li>
     </ol>
     <div class="row">

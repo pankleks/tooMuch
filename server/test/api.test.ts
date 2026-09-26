@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../src/index.js";
 import { localDate } from "../src/clock.js";
+import { weekdayOf } from "../src/store.js";
 
 let dir: string;
 process.env.VITEST = "true";
@@ -36,6 +37,7 @@ describe("api", () => {
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
     expect(adminScript.body).toContain('aria-label="Delete device"');
+    expect(adminScript.body).toContain('data-act="daily-bonus"');
 
     const manifest = await app.inject({ method: "GET", url: "/admin-static/manifest.webmanifest" });
     expect(manifest.statusCode).toBe(200);
@@ -70,8 +72,13 @@ describe("api", () => {
     expect(cfg.version).toBe(1);
     expect(cfg.days["1"].limit_min).toBe(1440);
 
-    const c304 = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=Europe%2FWarsaw`, headers: h });
+    const c304 = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=Europe%2FWarsaw&date=${localDate()}`, headers: h });
     expect(c304.statusCode).toBe(304);
+    const yesterday = new Date(`${localDate()}T12:00:00Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const newDay = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=Europe%2FWarsaw&date=${yesterday.toISOString().slice(0, 10)}`, headers: h });
+    expect(newDay.statusCode).toBe(200);
+    expect(newDay.json().daily_bonus_date).toBe(localDate());
 
     // heartbeat "today" must match the server clock (overview keys by current date)
     const todayStr = localDate();
@@ -143,6 +150,61 @@ describe("api", () => {
       payload: { force_lock: true },
     });
     expect(lock.statusCode).toBe(200);
+  });
+
+  it("admin can cumulatively add daily-limit time for today without changing the recurring schedule", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "daily-bonus" } });
+    const { device_id, token } = reg.json();
+    const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const today = localDate();
+    const days = Object.fromEntries([1,2,3,4,5,6,7].map(i => [String(i), { limit_min: 120, windows: [] }]));
+    const schedule = await app.inject({ method: "PUT", url: `/api/admin/devices/${device_id}`, headers: auth, payload: { days } });
+    expect(schedule.statusCode).toBe(200);
+
+    const add15 = await app.inject({ method: "POST", url: `/api/admin/devices/${device_id}/daily-bonus`, headers: auth, payload: { minutes: 15 } });
+    expect(add15.statusCode).toBe(200);
+    const add30 = await app.inject({ method: "POST", url: `/api/admin/devices/${device_id}/daily-bonus`, headers: auth, payload: { minutes: 30 } });
+    expect(add30.json().daily_bonus_min).toBe(45);
+
+    const policy = await app.inject({
+      method: "GET", url: `/api/config/${device_id}?v=2&tz=Europe%2FWarsaw&date=${today}`,
+      headers: { "x-device-token": token },
+    });
+    expect(policy.statusCode).toBe(200);
+    expect(policy.json().daily_bonus_date).toBe(today);
+    expect(policy.json().daily_bonus_min).toBe(45);
+    expect(policy.json().days[weekdayOf(today)].limit_min).toBe(120);
+
+    await app.inject({ method: "POST", url: "/api/heartbeat", headers: { "x-device-token": token },
+      payload: { device_id, date: today, active_min: 25, locked: false } });
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    const device = overview.json().devices[0];
+    expect(device.today_bonus_min).toBe(45);
+    expect(device.today_quota).toBe("165m");
+    expect(device.today.quota).toBe("165m");
+    expect(device.config.days[weekdayOf(today)].limit_min).toBe(120);
+  });
+
+  it("daily bonus is rejected for a window-mode day and never alters its windows", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "window-bonus" } });
+    const { device_id } = reg.json();
+    const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const today = localDate();
+    const days: Record<string, unknown> = Object.fromEntries([1,2,3,4,5,6,7].map(i => [String(i), { limit_min: 120, windows: [] }]));
+    days[weekdayOf(today)] = { limit_min: 120, windows: [{ from: "16:00", to: "20:00" }] };
+    await app.inject({ method: "PUT", url: `/api/admin/devices/${device_id}`, headers: auth, payload: { days } });
+
+    const add = await app.inject({ method: "POST", url: `/api/admin/devices/${device_id}/daily-bonus`, headers: auth, payload: { minutes: 30 } });
+    expect(add.statusCode).toBe(409);
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    const device = overview.json().devices[0];
+    expect(device.today_mode).toBe("window");
+    expect(device.today_bonus_min).toBe(0);
+    expect(device.today_quota).toBe("16:00-20:00");
+    expect(device.config.days[weekdayOf(today)].windows).toEqual([{ from: "16:00", to: "20:00" }]);
+
+    const invalid = await app.inject({ method: "POST", url: `/api/admin/devices/${device_id}/daily-bonus`, headers: auth, payload: { minutes: 10 } });
+    expect(invalid.statusCode).toBe(400);
   });
 
   it("parallel heartbeats cannot undo a saved limit or recreate a deleted device", async () => {

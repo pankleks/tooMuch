@@ -110,11 +110,20 @@ function buildCard(d) {
   const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
   const activePanel = detailPanels.get(d.device_id) ?? "history";
   const lockLabel = d.force_lock ? "Unlock device" : "Lock device now";
+  const todayMode = today?.mode ?? d.today_mode;
+  const todayQuota = today?.quota ?? d.today_quota;
+  const onWindowDay = todayMode === "window";
+  const dailyBonusMin = Number(d.today_bonus_min) || 0;
   card.innerHTML = `
     <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
     <span class="muted">seen: ${esc(formatTimeAgo(d.last_seen))}</span></div>
-    <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(today?today.quota:"?"))} (${esc(today?today.mode:"?")}) ${esc(pct(today?today.active_min:0, today?today.quota:"", today?today.mode:""))}</span>
-    <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
+    <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(todayQuota ?? "?"))} (${esc(todayMode ?? "?")}) ${esc(today ? pct(today.active_min, today.quota, today.mode) : "")}</span>
+    <div class="bar" style="flex:1"><i style="width:${barWidth(today ?? {active_min:0, mode:todayMode, quota:todayQuota})}%"></i></div></div>
+    <div class="row daily-bonus-row">
+      <span>Extra time today: <strong>${formatMinutes(dailyBonusMin)}</strong></span>
+      ${[15,30,60].map(minutes=>`<button type="button" data-act="daily-bonus" data-minutes="${minutes}" aria-label="Add ${formatMinutes(minutes)} to today's daily limit" title="Add ${formatMinutes(minutes)} to today's daily limit" ${onWindowDay?"disabled":""}>+${formatMinutes(minutes)}</button>`).join("")}
+      <span class="muted">${onWindowDay ? "Today's time windows are unchanged; extra time only applies to daily limits." : "Adds to today's daily limit only; resets at midnight."}</span>
+    </div>
     <div class="row action-row">
       <button type="button" class="icon-button" data-act="lock" aria-label="${lockLabel}" title="${lockLabel}">${d.force_lock?ICONS.unlock:ICONS.lock}</button>
       <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
@@ -193,6 +202,16 @@ function buildCard(d) {
       lim.disabled = has;
     });
     inp.dispatchEvent(new Event("input"));
+  });
+  card.querySelectorAll('[data-act="daily-bonus"]').forEach(button=>{
+    button.onclick = async ()=>{
+      try {
+        await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}/daily-bonus`, {
+          method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({minutes:Number(button.dataset.minutes)})
+        });
+        await refresh();
+      } catch(e) { alert("Add time failed: " + e.message); }
+    };
   });
   card.querySelector('[data-act="lock"]').onclick = async ()=>{
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({force_lock: !d.force_lock})});

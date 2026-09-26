@@ -122,7 +122,7 @@ public sealed class Agent : IDisposable
 
     public async Task<bool> PollConfigAsync(CancellationToken ct)
     {
-        var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/config/{_cfg.DeviceId}?v={Policy.Version}&tz={Uri.EscapeDataString(Policy.TimeZone)}";
+        var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/config/{_cfg.DeviceId}?v={Policy.Version}&tz={Uri.EscapeDataString(Policy.TimeZone)}&date={Uri.EscapeDataString(TodayKey)}";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Add("X-Device-Token", _cfg.Token);
         using var res = await _http.SendAsync(req, ct);

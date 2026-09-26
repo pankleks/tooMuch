@@ -36,10 +36,39 @@ public class PolicyEvaluatorTests
     }
 
     [Fact]
+    public void DailyBonusAddsToOnlyTheMatchingDateLimit()
+    {
+        var p = BasePolicy();
+        p.DailyBonusDate = "2026-09-21";
+        p.DailyBonusMin = 30;
+
+        var withinBonus = PolicyEvaluator.Evaluate(p, Mon(10), 140);
+        Assert.Equal(State.Warning, withinBonus.State);
+        Assert.Equal(10, withinBonus.RemainingMin);
+        Assert.Equal(State.Locked, PolicyEvaluator.Evaluate(p, Mon(10), 150).State);
+        Assert.Equal(State.Locked, PolicyEvaluator.Evaluate(p, Mon(10).AddDays(1), 120).State);
+    }
+
+    [Fact]
+    public void DailyBonusCanGrantTimeWhenBaseLimitIsZero()
+    {
+        var p = BasePolicy();
+        p.Days["1"].LimitMin = 0;
+        p.DailyBonusDate = "2026-09-21";
+        p.DailyBonusMin = 15;
+
+        var decision = PolicyEvaluator.Evaluate(p, Mon(10), 0);
+        Assert.Equal(State.Warning, decision.State);
+        Assert.Equal(15, decision.RemainingMin);
+    }
+
+    [Fact]
     public void Window_Replaces_Limit_Inside_Unlimited_Outside_Locked()
     {
         var p = BasePolicy();
         p.Days["3"] = new DayConfig { LimitMin = 120, Windows = new() { new TimeWindow { From = "16:00", To = "20:00" } } };
+        p.DailyBonusDate = "2026-09-23";
+        p.DailyBonusMin = 60;
         var wed = new DateTime(2026, 9, 23, 17, 0, 0); // Wednesday
         var inside = PolicyEvaluator.Evaluate(p, wed, 9999);
         Assert.Equal(State.Ok, inside.State); // limit ignored

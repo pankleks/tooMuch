@@ -31,6 +31,13 @@ export async function saveDevice(dir: string, device: DeviceFile): Promise<void>
     const keep = new Set(keys.slice(-30));
     for (const k of keys) if (!keep.has(k)) delete device.usage[k];
   }
+  if (device.daily_bonuses) {
+    const bonusDates = Object.keys(device.daily_bonuses).sort();
+    if (bonusDates.length > 30) {
+      const keep = new Set(bonusDates.slice(-30));
+      for (const date of bonusDates) if (!keep.has(date)) delete device.daily_bonuses[date];
+    }
+  }
   const tmp = path.join(dir, `.${device.device_id}.${randomBytes(12).toString("hex")}.tmp`);
   await fs.writeFile(tmp, JSON.stringify(device, null, 2), "utf-8");
   await fs.rename(tmp, filePath(dir, device.device_id));
@@ -117,9 +124,18 @@ export async function registerDevice(
   return { created: true, device };
 }
 
-export function snapshotQuota(day: { limit_min: number; windows: { from: string; to: string }[] }, mode: "limit" | "window"): string {
+export function dailyBonusMin(device: DeviceFile, date: string): number {
+  const bonus = device.daily_bonuses?.[date] ?? 0;
+  return Number.isInteger(bonus) && bonus > 0 ? bonus : 0;
+}
+
+export function snapshotQuota(
+  day: { limit_min: number; windows: { from: string; to: string }[] },
+  mode: "limit" | "window",
+  bonusMin = 0
+): string {
   if (mode === "window") return day.windows.map((w) => `${w.from}-${w.to}`).join(",");
-  return `${day.limit_min}m`;
+  return `${day.limit_min + bonusMin}m`;
 }
 
 export function weekdayOf(dateStr: string): string {
@@ -140,7 +156,7 @@ export async function recordHeartbeat(
   const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
   const prev: UsageEntry | undefined = device.usage[entry.date];
   const active_min = Math.max(prev?.active_min ?? 0, Math.max(0, Math.floor(entry.active_min)));
-  device.usage[entry.date] = { active_min, mode, quota: snapshotQuota(day, mode) };
+  device.usage[entry.date] = { active_min, mode, quota: snapshotQuota(day, mode, dailyBonusMin(device, entry.date)) };
   device.last_seen = new Date().toISOString();
   device.locked = entry.locked;
   // Older clients omit this field; clear stale status rather than retaining it.
@@ -177,5 +193,5 @@ export function resnapshotToday(device: DeviceFile): void {
   const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
   const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
   entry.mode = mode;
-  entry.quota = snapshotQuota(day, mode);
+  entry.quota = snapshotQuota(day, mode, dailyBonusMin(device, today));
 }
