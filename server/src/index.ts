@@ -14,6 +14,7 @@ import {
   registerDevice,
   recordHeartbeat,
   applyConfigUpdate,
+  resnapshotToday,
 } from "./store.js";
 import { validateDays } from "./types.js";
 
@@ -176,6 +177,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.code(400).send({ error: "force_lock must be boolean" });
       const res = applyConfigUpdate(device, patch as never);
       if (res.error) return reply.code(400).send({ error: res.error });
+      resnapshotToday(device);
       await saveDevice(dataDir(), device);
       return reply.send({ ok: true, version: device.config.version, config: device.config });
     }

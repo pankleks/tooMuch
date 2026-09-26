@@ -120,4 +120,32 @@ describe("api", () => {
     const noAuth = await app.inject({ method: "DELETE", url: `/api/admin/devices/${device_id}` });
     expect(noAuth.statusCode).toBe(401);
   });
+
+  it("config change re-snapshots today quota without new heartbeat", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "pc-quota" } });
+    const { device_id, token } = reg.json();
+    const cred = Buffer.from("admin:test-admin").toString("base64");
+    const auth = { authorization: `Basic ${cred}` };
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    await app.inject({
+      method: "POST", url: "/api/heartbeat", headers: { "x-device-token": token },
+      payload: { device_id, date: todayStr, active_min: 10, locked: false },
+    });
+    const before = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    expect(before.json().devices.find((d: { device_id: string }) => d.device_id === device_id).today.quota).toBe("1440m");
+
+    const days: Record<string, unknown> = {};
+    for (let i = 1; i <= 7; i++) days[String(i)] = { limit_min: 120, windows: [] };
+    const put = await app.inject({
+      method: "PUT", url: `/api/admin/devices/${device_id}`, headers: { ...auth, "content-type": "application/json" },
+      payload: { days },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const after = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    const today = after.json().devices.find((d: { device_id: string }) => d.device_id === device_id).today;
+    expect(today.quota).toBe("120m");
+    expect(today.active_min).toBe(10);
+  });
 });

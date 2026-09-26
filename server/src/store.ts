@@ -158,3 +158,18 @@ export function applyConfigUpdate(device: DeviceFile, patch: Partial<ServerConfi
   device.config.version += 1;
   return { error: null };
 }
+
+/**
+ * Recompute today's usage quota snapshot after a config change, so
+ * /api/admin/overview shows the new limit immediately instead of waiting
+ * for the next heartbeat (which re-snapshots at most every 60s).
+ */
+export function resnapshotToday(device: DeviceFile): void {
+  const today = new Date().toISOString().slice(0, 10);
+  const entry = device.usage[today];
+  if (!entry) return;
+  const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
+  const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
+  entry.mode = mode;
+  entry.quota = snapshotQuota(day, mode);
+}
