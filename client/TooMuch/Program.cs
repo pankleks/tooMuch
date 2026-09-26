@@ -146,7 +146,7 @@ internal static class Program
         icon.ContextMenuStrip = menu;
 
         var timer = new System.Windows.Forms.Timer { Interval = 15000 };
-        Form? overlay = null;
+        var overlays = new List<Form>(); // one fullscreen overlay per monitor
         var lockedNow = false; // Alt+F4 guard below: user close cancelled while locked
         timer.Tick += async (_, _) =>
         {
@@ -164,31 +164,43 @@ internal static class Program
                 };
                 if (d.RemainingMin is 15 or 5 or 1)
                     icon.ShowBalloonTip(10000, "tooMuch", d.Message, ToolTipIcon.Warning);
-                if (d.State == State.Locked && overlay is null)
+                if (d.State == State.Locked && overlays.Count != Screen.AllScreens.Length)
                 {
-                    overlay = new Form
+                    // (re)build when locked: covers every monitor, incl. hot-plugged ones.
+                    // Dispose bypasses the FormClosing guard (only Close() raises it).
+                    foreach (var o in overlays) { try { o.Dispose(); } catch { } }
+                    overlays.Clear();
+                    foreach (var screen in Screen.AllScreens)
                     {
-                        Text = "tooMuch – locked",
-                        FormBorderStyle = FormBorderStyle.None,
-                        WindowState = FormWindowState.Maximized,
-                        TopMost = true,
-                        BackColor = System.Drawing.Color.DarkRed,
-                    };
-                    var label = new Label
-                    {
-                        Dock = DockStyle.Fill,
-                        TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                        ForeColor = System.Drawing.Color.White,
-                        Font = new System.Drawing.Font("Segoe UI", 20),
-                        Text = $"Computer locked\n{d.Message}\nAsk your parent.",
-                    };
-                    overlay.Controls.Add(label);
-                    overlay.FormClosing += (_, e) => { if (lockedNow) e.Cancel = true; };
-                    overlay.Show();
+                        var overlay = new Form
+                        {
+                            Text = "tooMuch – locked",
+                            FormBorderStyle = FormBorderStyle.None,
+                            StartPosition = FormStartPosition.Manual,
+                            Location = screen.Bounds.Location,
+                            Size = screen.Bounds.Size,
+                            TopMost = true,
+                            ShowInTaskbar = false,
+                            BackColor = System.Drawing.Color.DarkRed,
+                        };
+                        var label = new Label
+                        {
+                            Dock = DockStyle.Fill,
+                            TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                            ForeColor = System.Drawing.Color.White,
+                            Font = new System.Drawing.Font("Segoe UI", 20),
+                            Text = $"Computer locked\n{d.Message}\nAsk your parent.",
+                        };
+                        overlay.Controls.Add(label);
+                        overlay.FormClosing += (_, e) => { if (lockedNow) e.Cancel = true; };
+                        overlay.Show();
+                        overlays.Add(overlay);
+                    }
                 }
-                else if (d.State != State.Locked && overlay is not null)
+                else if (d.State != State.Locked && overlays.Count > 0)
                 {
-                    overlay.Close(); overlay = null;
+                    foreach (var o in overlays) { try { o.Close(); } catch { } o.Dispose(); }
+                    overlays.Clear();
                 }
             }
             catch { }
