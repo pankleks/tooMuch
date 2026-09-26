@@ -1,3 +1,5 @@
+import { formatMinutes, formatQuota, formatTimeAgo } from "./format.js";
+
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 let devices = [];
 const drafts = new Map();
@@ -41,7 +43,7 @@ function dotClass(d) {
 function todaySummary(d) {
   const t = d.today;
   if (!t) return "no data";
-  return `${t.active_min} min / ${t.quota||"?"}`;
+  return `${formatMinutes(t.active_min)} / ${formatQuota(t.quota)}`;
 }
 
 function selectedId() {
@@ -102,8 +104,8 @@ function buildCard(d) {
   const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
   card.innerHTML = `
     <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
-    <span class="muted">seen: ${esc(d.last_seen||"never")}</span></div>
-    <div class="row"><span>Today: <strong>${today?today.active_min:0} min</strong> / ${esc(today?today.quota:"?")} (${esc(today?today.mode:"?")}) ${esc(pct(today?today.active_min:0, today?today.quota:"", today?today.mode:""))}</span>
+    <span class="muted">seen: ${esc(formatTimeAgo(d.last_seen))}</span></div>
+    <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(today?today.quota:"?"))} (${esc(today?today.mode:"?")}) ${esc(pct(today?today.active_min:0, today?today.quota:"", today?today.mode:""))}</span>
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
     <div class="row">
       <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
@@ -126,7 +128,7 @@ function buildCard(d) {
       <button data-act="save">Save days</button>
     </div>
     <table><tr><th>Date</th><th>Mode</th><th>Quota</th><th>Used</th></tr>
-    ${d.last7.map(x=>`<tr><td>${x.date}</td><td>${esc(x.mode??"-")}</td><td>${esc(x.quota??"-")}</td><td>${x.active_min} min</td></tr>`).join("")}
+    ${d.last7.map(x=>`<tr><td>${x.date}</td><td>${esc(x.mode??"-")}</td><td>${esc(formatQuota(x.quota??"-"))}</td><td>${formatMinutes(x.active_min)}</td></tr>`).join("")}
     </table>`;
   // live mode toggle
   card.addEventListener("input", () => {
@@ -153,7 +155,7 @@ function buildCard(d) {
     refresh();
   };
   card.querySelector('[data-act="message"]').onclick = async ()=>{
-    const text = prompt("Message to your child (up to 1000 characters; valid for 15 minutes):");
+    const text = prompt(`Message to your child (up to 1000 characters; valid for ${formatMinutes(15)}):`);
     if (text === null || !text.trim()) return;
     if (text.length > 1000) { alert("Maximum 1000 characters."); return; }
     try {

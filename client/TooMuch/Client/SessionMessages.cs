@@ -49,7 +49,9 @@ internal sealed class SessionMessages
                 try
                 {
                     if (ct.IsCancellationRequested || !SessionGuard.UnlockedSessions(config.ChildSid).Contains(session)) return;
-                    SessionGuard.ShowMessage(session, "Pozostały czas", $"Pozostało minut: {alert.Minutes}.\nSesja zostanie rozłączona po upływie czasu. Zapisz swoją pracę.", 60);
+                    var unit = alert.Minutes == 1 ? "minute" : "minutes";
+                    SessionGuard.ShowMessage(session, "Time remaining",
+                        $"You have {alert.Minutes} {unit} remaining.\nYour session will be disconnected when your time expires. Save your work.", 60);
                     warned.RemoveWhere(k => !k.StartsWith(agent.TodayKey + ":", StringComparison.Ordinal));
                     warned.Add(alert.Key);
                     Save(WarningFile, warned);
@@ -94,7 +96,7 @@ internal sealed class SessionMessages
                 if (!SessionGuard.UnlockedSessions(config.ChildSid).Contains(sessions[0])) return;
                 remaining = (message.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds;
                 if (remaining < 1) continue;
-                var ok = SessionGuard.ShowMessage(sessions[0], "Wiadomość od rodzica", message.Text,
+                var ok = SessionGuard.ShowMessage(sessions[0], "Message from parent", message.Text,
                     (uint)Math.Clamp(remaining, 1, 60));
                 attempted.Add(message.Id);
                 if (ok)
