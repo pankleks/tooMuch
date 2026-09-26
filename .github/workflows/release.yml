@@ -9,7 +9,43 @@ on:
         required: false
         default: ""
 jobs:
+  client-tests:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet test ./client/TooMuch.Tests/TooMuch.Tests.csproj -c Release
+
+  server-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npm run build
+        working-directory: server
+      - run: npm test
+        working-directory: server
+      - run: npm run test:e2e
+        working-directory: server
+
   windows-client:
+    needs: [client-tests, server-tests]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -47,11 +83,13 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.rel.outputs.tag }}
+          prerelease: ${{ contains(steps.rel.outputs.tag, '-') }}
           files: |
             tooMuch-win-x64.zip
             version.json
 
   server-image:
+    needs: [client-tests, server-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: read

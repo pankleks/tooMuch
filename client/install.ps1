@@ -1,74 +1,102 @@
 #Requires -RunAsAdministrator
 param(
-  [string]$ServerUrl = "http://raspberrypi.local:3020",
+  [string]$ServerUrl = "",
   [string]$DeviceId = "",
   [string]$Token = "",
+  [string]$ChildAccount = "",
   [string]$InstallDir = "C:\Program Files\TooMuch"
 )
 $ErrorActionPreference = "Stop"
+$dataDir = "C:\ProgramData\TooMuch"
+$identityFile = Join-Path $dataDir "device.json"
+$saved = if (Test-Path $identityFile) { Get-Content $identityFile -Raw | ConvertFrom-Json }
+if (!$ServerUrl) { $ServerUrl = if ($saved.serverUrl) { $saved.serverUrl } else { "http://raspberrypi.local:3020" } }
+if ((!$DeviceId) -xor (!$Token)) { throw "Supply both DeviceId and Token, or neither." }
+if (!$DeviceId -and $saved.deviceId -and $saved.token) {
+  if ($saved.serverUrl.TrimEnd('/') -ne $ServerUrl.TrimEnd('/')) { throw "Server changed: supply an explicit DeviceId and Token." }
+  $DeviceId = $saved.deviceId
+  $Token = $saved.token
+}
 
-$exe = Join-Path $InstallDir "TooMuch.exe"
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Copy-Item -Path (Join-Path $PSScriptRoot "TooMuch.exe") -Destination $exe -Force
+# Elevated credentials may belong to a parent. Use Explorer's owner in THIS
+# interactive session, never the elevated process's username.
+if ($ChildAccount) {
+  $childSid = ([Security.Principal.NTAccount]$ChildAccount).Translate([Security.Principal.SecurityIdentifier]).Value
+} elseif ($saved.childSid) {
+  $childSid = $saved.childSid
+} else {
+  $sessionId = (Get-Process -Id $PID).SessionId
+  $owners = @(Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" |
+    Where-Object { $_.SessionId -eq $sessionId } |
+    ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid } |
+    Where-Object { $_.ReturnValue -eq 0 } | Select-Object -ExpandProperty Sid -Unique)
+  if ($owners.Count -ne 1) { throw "Cannot identify the child session. Supply -ChildAccount 'COMPUTER\child'." }
+  $childSid = $owners[0]
+}
+$account = ([Security.Principal.SecurityIdentifier]$childSid).Translate([Security.Principal.NTAccount]).Value
+Write-Host "Protected account: $account ($childSid)"
+$source = Join-Path $PSScriptRoot "TooMuch.exe"
+if (!(Test-Path $source)) { throw "TooMuch.exe is missing from this bundle." }
 
-# enrollment: auto-register when DeviceId/Token not given
-if ([string]::IsNullOrWhiteSpace($DeviceId) -or [string]::IsNullOrWhiteSpace($Token)) {
-  Write-Host "Auto-registering $($env:COMPUTERNAME) at $ServerUrl ..."
-  $body = @{ hostname = $env:COMPUTERNAME } | ConvertTo-Json
-  $reg = Invoke-RestMethod -Method Post -Uri "$ServerUrl/api/register" -Body $body -ContentType "application/json"
+# Stop every legacy launcher before replacing the binary.
+foreach ($task in @('TooMuch', 'TooMuchTray')) {
+  Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
+}
+$service = Get-Service TooMuch -ErrorAction SilentlyContinue
+if ($service) { Stop-Service TooMuch -Force }
+Get-Process TooMuch -ErrorAction SilentlyContinue | Stop-Process -Force
+New-Item -ItemType Directory -Force $InstallDir, $dataDir | Out-Null
+Copy-Item $source (Join-Path $InstallDir 'TooMuch.exe') -Force
+
+if (!$DeviceId) {
+  $reg = Invoke-RestMethod -Method Post -Uri "$($ServerUrl.TrimEnd('/'))/api/register" -ContentType 'application/json' -Body (@{hostname=$env:COMPUTERNAME} | ConvertTo-Json)
   $DeviceId = $reg.device_id
   $Token = $reg.token
-  Write-Host "Registered as $DeviceId"
 }
-
-# persist for SYSTEM task (HKLM, admin-only) + ProgramData fallback
-New-Item -Path "HKLM:\SOFTWARE\TooMuch" -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "ServerUrl" -Value $ServerUrl -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "DeviceId" -Value $DeviceId -Force | Out-Null
-New-ItemProperty -Path "HKLM:\SOFTWARE\TooMuch" -Name "Token" -Value $Token -Force | Out-Null
-$dataDir = "C:\ProgramData\TooMuch"
-New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-@{ serverUrl = $ServerUrl; deviceId = $DeviceId; token = $Token } | ConvertTo-Json | Out-File (Join-Path $dataDir "device.json") -Encoding utf8
-
-# lock down files: Users = read-only (child is Standard User)
-icacls $InstallDir /inheritance:r | Out-Null
-icacls $InstallDir /grant:r "Administrators:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Users:(OI)(CI)R" | Out-Null
-
-# enforcement loop (SYSTEM, at startup, restart on failure)
-# NOTE: --service runs as a SYSTEM scheduled task, NOT an SCM service.
-# The exe is a plain console loop (Program.cs RunServiceAsync) and never
-# signals the Service Control Manager, so New-Service/Start-Service always
-# ends in a 7000/7009 start timeout. A startup task needs no SCM handshake.
-# Session-0 bonus: GetLastInputInfo/LockWorkStation are per-session APIs;
-# in-session enforcement is done by the tray task below.
-$svc = "TooMuch"
-$legacySvc = Get-Service -Name $svc -ErrorAction SilentlyContinue
-if ($legacySvc) {
-  Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-  & "$env:SystemRoot\System32\sc.exe" delete $svc | Out-Null
+New-Item 'HKLM:\SOFTWARE\TooMuch' -Force | Out-Null
+foreach ($entry in @{ServerUrl=$ServerUrl; DeviceId=$DeviceId; Token=$Token; ChildSid=$childSid; InstallDir=$InstallDir}.GetEnumerator()) {
+  New-ItemProperty 'HKLM:\SOFTWARE\TooMuch' -Name $entry.Key -Value $entry.Value -PropertyType String -Force | Out-Null
 }
-Stop-ScheduledTask -TaskName $svc -ErrorAction SilentlyContinue
-$svcAction = New-ScheduledTaskAction -Execute $exe -Argument "--service"
-$svcTrigger = New-ScheduledTaskTrigger -AtStartup
-$svcPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-$svcSettings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
-Register-ScheduledTask -TaskName $svc -Action $svcAction -Trigger $svcTrigger -Principal $svcPrincipal -Settings $svcSettings -Force | Out-Null
-Start-ScheduledTask -TaskName $svc
+@{serverUrl=$ServerUrl; deviceId=$DeviceId; token=$Token; childSid=$childSid} | ConvertTo-Json | Set-Content $identityFile -Encoding UTF8
+$registryAcl = New-Object Security.AccessControl.RegistrySecurity
+$registryAcl.SetAccessRuleProtection($true, $false)
+$registryAcl.SetOwner([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+  $rule = New-Object Security.AccessControl.RegistryAccessRule([Security.Principal.SecurityIdentifier]$sid, 'FullControl', 'ContainerInherit', 'None', 'Allow')
+  $registryAcl.AddAccessRule($rule)
+}
+Set-Acl 'HKLM:\SOFTWARE\TooMuch' $registryAcl
 
-# tray autostart for every user
-# NOTE: ScheduledTask cmdlets are used instead of schtasks.exe: schtasks
-# needs '/tr "<exe>" --tray' as raw text and PowerShell strips the inner
-# quotes (=> 'Invalid argument/option - Files\TooMuch\...'), and
-# 'schtasks /delete' on a missing task aborts the script because
-# $ErrorActionPreference = "Stop". Register-ScheduledTask -Force overwrites.
-$task = "TooMuchTray"
-$taskAction = New-ScheduledTaskAction -Execute $exe -Argument "--tray"
-$taskTrigger = New-ScheduledTaskTrigger -AtLogOn
-$taskPrincipal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Highest
-Register-ScheduledTask -TaskName $task -Action $taskAction -Trigger $taskTrigger -Principal $taskPrincipal -Force | Out-Null
-
-# verify both tasks exist (throws on missing -> loud failure, not silent)
-Get-ScheduledTask -TaskName $svc -ErrorAction Stop | Out-Null
-Get-ScheduledTask -TaskName $task -ErrorAction Stop | Out-Null
-
-Write-Host "OK: $DeviceId installed. Edit limits at $ServerUrl/admin"
+# The service owns all mutable data and credentials; user processes do not write it.
+foreach ($folder in @($InstallDir, $dataDir)) {
+  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl.SetAccessRuleProtection($true, $false)
+  $acl.SetOwner([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+  foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+    $rule = New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.SecurityIdentifier]$sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $acl.AddAccessRule($rule)
+  }
+  Set-Acl $folder $acl
+  # Remove old explicit per-user grants from files left by tray versions.
+  Get-ChildItem $folder -Recurse -Force | ForEach-Object {
+    $childAcl = Get-Acl $_.FullName
+    $childAcl.SetAccessRuleProtection($false, $false)
+    foreach ($rule in @($childAcl.Access | Where-Object { !$_.IsInherited })) { [void]$childAcl.RemoveAccessRuleSpecific($rule) }
+    $childAcl.SetOwner([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+    Set-Acl $_.FullName $childAcl
+  }
+}
+$binPath = '"' + (Join-Path $InstallDir 'TooMuch.exe') + '" --service'
+if ($service) {
+  $cim = Get-CimInstance Win32_Service -Filter "Name='TooMuch'"
+  $result = Invoke-CimMethod $cim -MethodName Change -Arguments @{PathName=$binPath; StartMode='Automatic'; StartName='LocalSystem'}
+  if ($result.ReturnValue -ne 0) { throw "Service update failed: $($result.ReturnValue)" }
+} else {
+  New-Service TooMuch -BinaryPathName $binPath -DisplayName 'TooMuch' -StartupType Automatic | Out-Null
+}
+sc.exe failure TooMuch reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Service recovery configuration failed." }
+Start-Service TooMuch
+(Get-Service TooMuch).WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
+Write-Host "OK: $DeviceId installed for $account. Edit limits at $ServerUrl/admin"

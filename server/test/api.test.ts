@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../src/index.js";
+import { localDate } from "../src/clock.js";
 
 let dir: string;
 process.env.VITEST = "true";
@@ -36,11 +37,11 @@ describe("api", () => {
     expect(cfg.version).toBe(1);
     expect(cfg.days["1"].limit_min).toBe(1440);
 
-    const c304 = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1`, headers: h });
+    const c304 = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=Europe%2FWarsaw`, headers: h });
     expect(c304.statusCode).toBe(304);
 
     // heartbeat "today" must match the server clock (overview keys by current date)
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDate();
     const hb = await app.inject({
       method: "POST", url: "/api/heartbeat", headers: h,
       payload: { device_id, date: todayStr, active_min: 45, locked: false },
@@ -91,6 +92,39 @@ describe("api", () => {
     expect(lock.statusCode).toBe(200);
   });
 
+  it("parallel heartbeats cannot undo a saved limit or recreate a deleted device", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "parallel" } });
+    const { device_id, token } = reg.json();
+    const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const days = Object.fromEntries([1,2,3,4,5,6,7].map(i => [String(i), { limit_min: 90, windows: [] }]));
+    const requests = [app.inject({ method: "PUT", url: `/api/admin/devices/${device_id}`, headers: auth, payload: { days } }),
+      ...Array.from({ length: 15 }, (_, i) => app.inject({
+        method: "POST", url: "/api/heartbeat", headers: { "x-device-token": token },
+        payload: { device_id, date: localDate(), active_min: i, locked: true },
+      }))];
+    const responses = await Promise.all(requests);
+    expect(responses.every(r => r.statusCode === 200)).toBe(true);
+    const ov = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    expect(ov.json().devices[0].config.days["1"].limit_min).toBe(90);
+    expect(ov.json().devices[0].today.active_min).toBe(14);
+    expect(ov.json().devices[0].locked).toBe(true);
+    await Promise.all([
+      app.inject({ method: "DELETE", url: `/api/admin/devices/${device_id}`, headers: auth }),
+      app.inject({ method: "POST", url: "/api/heartbeat", headers: { "x-device-token": token },
+        payload: { device_id, date: localDate(), active_min: 20, locked: false } }),
+    ]);
+    const after = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    expect(after.json().devices).toEqual([]);
+  });
+
+  it("timezone changes invalidate the client's cached configuration", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "timezone" } });
+    const { device_id, token } = reg.json();
+    const response = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=UTC`, headers: { "x-device-token": token } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().time_zone).toBe("Europe/Warsaw");
+  });
+
   it("wrong token -> 401", async () => {
     const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "pc-x" } });
     const { device_id } = reg.json();
@@ -126,7 +160,7 @@ describe("api", () => {
     const { device_id, token } = reg.json();
     const cred = Buffer.from("admin:test-admin").toString("base64");
     const auth = { authorization: `Basic ${cred}` };
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localDate();
 
     await app.inject({
       method: "POST", url: "/api/heartbeat", headers: { "x-device-token": token },

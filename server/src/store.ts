@@ -1,10 +1,12 @@
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { DeviceFile, ServerConfig, UsageEntry, defaultConfig, normalizeHostname } from "./types.js";
+import { localDate } from "./clock.js";
 
 export function dataDir(): string {
-  return process.env.DATA_DIR ?? new URL("../../data", import.meta.url).pathname;
+  return process.env.DATA_DIR ?? fileURLToPath(new URL("../../data", import.meta.url));
 }
 
 export function distDir(): string {
@@ -29,7 +31,7 @@ export async function saveDevice(dir: string, device: DeviceFile): Promise<void>
     const keep = new Set(keys.slice(-30));
     for (const k of keys) if (!keep.has(k)) delete device.usage[k];
   }
-  const tmp = path.join(dir, `.${device.device_id}.${process.pid}.tmp`);
+  const tmp = path.join(dir, `.${device.device_id}.${randomBytes(12).toString("hex")}.tmp`);
   await fs.writeFile(tmp, JSON.stringify(device, null, 2), "utf-8");
   await fs.rename(tmp, filePath(dir, device.device_id));
 }
@@ -140,6 +142,7 @@ export async function recordHeartbeat(
   const active_min = Math.max(prev?.active_min ?? 0, Math.max(0, Math.floor(entry.active_min)));
   device.usage[entry.date] = { active_min, mode, quota: snapshotQuota(day, mode) };
   device.last_seen = new Date().toISOString();
+  device.locked = entry.locked;
   await saveDevice(dir, device);
   return device;
 }
@@ -165,7 +168,7 @@ export function applyConfigUpdate(device: DeviceFile, patch: Partial<ServerConfi
  * for the next heartbeat (which re-snapshots at most every 60s).
  */
 export function resnapshotToday(device: DeviceFile): void {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   const entry = device.usage[today];
   if (!entry) return;
   const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };

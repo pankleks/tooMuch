@@ -3,7 +3,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyBasicAuth from "@fastify/basic-auth";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   dataDir,
   distDir,
@@ -17,6 +17,7 @@ import {
   resnapshotToday,
 } from "./store.js";
 import { validateDays } from "./types.js";
+import { recentDates, timeZone } from "./clock.js";
 
 const PORT = Number(process.env.PORT ?? 3020);
 function adminPassword(): string {
@@ -47,6 +48,21 @@ async function deviceAuth(req: FastifyRequest, deviceId: string): Promise<Return
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  timeZone();
+  // Serialize complete read-modify-write requests in this single server process.
+  // Atomic rename alone does not prevent a heartbeat from undoing an admin update.
+  let pending = Promise.resolve();
+  const releases = new WeakMap<FastifyRequest, () => void>();
+  app.addHook("onRequest", async req => {
+    if (!["POST", "PUT", "DELETE"].includes(req.method)) return;
+    const previous = pending;
+    pending = new Promise<void>(resolve => releases.set(req, resolve));
+    await previous;
+  });
+  app.addHook("onResponse", async req => {
+    releases.get(req)?.();
+    releases.delete(req);
+  });
 
   await app.register(fastifyBasicAuth, {
     validate: async (username: string, password: string) => {
@@ -82,13 +98,14 @@ export async function buildApp(): Promise<FastifyInstance> {
   );
 
   // ---- device: poll config ----
-  app.get("/api/config/:id", async (req: FastifyRequest<{ Params: { id: string }; Querystring: { v?: string } }>, reply: FastifyReply) => {
+  app.get("/api/config/:id", async (req: FastifyRequest<{ Params: { id: string }; Querystring: { v?: string; tz?: string } }>, reply: FastifyReply) => {
     const device = await deviceAuth(req, req.params.id);
     if (!device) return reply.code(401).send({ error: "unauthorized" });
     const v = Number(req.query.v ?? -1);
-    if (v === device.config.version) return reply.code(304).send();
+    if (v === device.config.version && req.query.tz === timeZone()) return reply.code(304).send();
     return reply.send({
       device_id: device.device_id,
+      time_zone: timeZone(),
       version: device.config.version,
       force_lock: device.config.force_lock,
       idle_threshold_sec: device.config.idle_threshold_sec,
@@ -140,20 +157,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   // ---- admin: overview (today + last 7d) ----
   app.get("/api/admin/overview", { onRequest: app.basicAuth }, async (_req, _reply) => {
     const devices = await listDevices(dataDir());
-    const today = new Date();
-    const days: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      days.push(d.toISOString().slice(0, 10));
-    }
+    const days = recentDates();
     return {
+      time_zone: timeZone(),
       devices: devices.map((d) => ({
         device_id: d.device_id,
         name: d.name,
         last_seen: d.last_seen,
         version: d.config.version,
         force_lock: d.config.force_lock,
+        locked: d.locked ?? null,
         today: d.usage[days[0]] ?? null,
         last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
         config: d.config,
@@ -218,7 +231,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   return app;
 }
 
-if (process.env.VITEST !== "true" && import.meta.url === `file://${process.argv[1]}`) {
+if (process.env.VITEST !== "true" && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const app = await buildApp();
   if (adminPassword() === "changeme") {
     console.warn("[warn] ADMIN_PASSWORD not set, using default 'changeme' – set it in .env");

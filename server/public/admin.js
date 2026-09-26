@@ -1,5 +1,7 @@
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 let devices = [];
+const drafts = new Map();
+let refreshSequence = 0;
 const STALE_MS = 5 * 60 * 1000;
 
 async function api(path, opts={}) {
@@ -80,14 +82,16 @@ function renderDetail() {
 }
 
 async function refresh() {
+  const sequence = ++refreshSequence;
   const st = document.getElementById("status");
   st.textContent = "loading…";
   try {
     const ov = await api("/api/admin/overview");
+    if (sequence !== refreshSequence) return;
     devices = ov.devices || [];
     st.textContent = `devices: ${devices.length}`;
     renderTabs();
-    renderDetail();
+    if (!document.querySelector('#list input:focus')) renderDetail();
   } catch(e){ st.textContent = "error: "+e.message; }
 }
 
@@ -95,7 +99,7 @@ function buildCard(d) {
   const today = d.today;
   const card = document.createElement("div");
   card.className = "card";
-  const lockBadge = d.force_lock ? `<span class="badge lock">LOCK</span>` : `<span class="badge">OK</span>`;
+  const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
   card.innerHTML = `
     <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
     <span class="muted">seen: ${esc(d.last_seen||"never")}</span></div>
@@ -109,9 +113,10 @@ function buildCard(d) {
     <table><tr><th>Day</th><th>Limit [min]</th><th>Windows</th><th>Mode</th></tr>
     ${[1,2,3,4,5,6,7].map(n=>{
       const c = d.config.days[String(n)];
+      const draft = drafts.get(d.device_id)?.[String(n)];
       return `<tr><td>${DAY_NAMES[n]}</td>
-      <td><input type="number" min="0" max="1440" data-day="${n}" data-f="limit" value="${c.limit_min}"></td>
-      <td><input type="text" data-day="${n}" data-f="windows" value="${esc((c.windows||[]).map(w=>w.from+"-"+w.to).join(", "))}" placeholder="empty = limit mode"></td>
+      <td><input type="number" min="0" max="1440" data-day="${n}" data-f="limit" value="${esc(draft?.limit ?? c.limit_min)}"></td>
+      <td><input type="text" data-day="${n}" data-f="windows" value="${esc(draft?.windows ?? (c.windows||[]).map(w=>w.from+"-"+w.to).join(", "))}" placeholder="empty = limit mode"></td>
       <td class="mode" data-day="${n}">${(c.windows&&c.windows.length)?"WINDOW":"LIMIT"}</td></tr>`;
     }).join("")}
     </table>
@@ -122,6 +127,14 @@ function buildCard(d) {
     ${d.last7.map(x=>`<tr><td>${x.date}</td><td>${esc(x.mode??"-")}</td><td>${esc(x.quota??"-")}</td><td>${x.active_min} min</td></tr>`).join("")}
     </table>`;
   // live mode toggle
+  card.addEventListener("input", () => {
+    const draft = {};
+    for (let n=1;n<=7;n++) draft[String(n)] = {
+      limit: card.querySelector(`input[data-day="${n}"][data-f="limit"]`).value,
+      windows: card.querySelector(`input[data-day="${n}"][data-f="windows"]`).value,
+    };
+    drafts.set(d.device_id, draft);
+  });
   card.querySelectorAll('input[data-f="windows"]').forEach(inp=>{
     inp.addEventListener("input", ()=>{
       const day = inp.dataset.day;
@@ -149,6 +162,8 @@ function buildCard(d) {
     refresh();
   };
   card.querySelector('[data-act="save"]').onclick = async ()=>{
+    try {
+    ++refreshSequence;
     const days = {};
     for (let n=1;n<=7;n++) {
       const lim = Number(card.querySelector(`input[data-day="${n}"][data-f="limit"]`).value);
@@ -164,7 +179,9 @@ function buildCard(d) {
       days[String(n)] = {limit_min: lim, windows};
     }
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({days})});
+    drafts.delete(d.device_id);
     refresh();
+    } catch(e) { document.getElementById("status").textContent = "Save failed: " + e.message; }
   };
   return card;
 }

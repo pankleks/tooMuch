@@ -1,97 +1,84 @@
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
-using TooMuch.Win32;
+using System.Security.Principal;
 
 namespace TooMuch.Client;
 
-// SYSTEM-side watchdog: a standard user can kill their own tray process,
-// so the --service loop (session 0) respawns --tray in every active
-// interactive session. Never throws: must not break the service loop.
+// Called only by LocalSystem. No user-owned process participates in enforcement.
 internal static class SessionGuard
 {
-    public static void EnsureTray(string exePath)
-    {
-        try
-        {
-            foreach (var sid in ActiveSessionIds())
-            {
-                if (sid == 0) continue;
-                if (TrayInSession(sid)) continue;
-                LaunchInSession(exePath, sid);
-            }
-        }
-        catch { }
-    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Session { public int Id; public IntPtr Name; public int State; }
 
-    private static List<uint> ActiveSessionIds()
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct InfoLevel1
     {
-        var out_ = new List<uint>();
-        IntPtr buf = IntPtr.Zero;
-        int count = 0;
-        try
-        {
-            if (!Native.WTSEnumerateSessions(IntPtr.Zero, 0, 1, ref buf, ref count))
-                return out_;
-            var size = Marshal.SizeOf<Native.WTS_SESSION_INFO>();
-            for (var i = 0; i < count; i++)
-            {
-                var si = Marshal.PtrToStructure<Native.WTS_SESSION_INFO>(IntPtr.Add(buf, i * size));
-                if (si.State == 0 /* WTSActive */ && si.SessionId > 0)
-                    out_.Add((uint)si.SessionId);
-            }
-        }
-        catch { }
-        finally
-        {
-            if (buf != IntPtr.Zero) Native.WTSFreeMemory(buf);
-        }
-        return out_;
+        public int SessionId, State, Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 33)] public string Station;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 21)] public string User;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 18)] public string Domain;
+        public long Logon, Connect, Disconnect, LastInput, Current;
+        public uint IncomingBytes, OutgoingBytes, IncomingFrames, OutgoingFrames,
+            IncomingCompressed, OutgoingCompressed;
     }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Info { public uint Level; public InfoLevel1 Data; }
 
-    private static bool TrayInSession(uint sid)
+    [DllImport("wtsapi32.dll", EntryPoint = "WTSEnumerateSessionsW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Enumerate(IntPtr server, int reserved, int version, out IntPtr buffer, out int count);
+    [DllImport("wtsapi32.dll", EntryPoint = "WTSQuerySessionInformationW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Query(IntPtr server, int id, int infoClass, out IntPtr buffer, out int size);
+    [DllImport("wtsapi32.dll")] private static extern void WTSFreeMemory(IntPtr buffer);
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WTSQueryUserToken(uint id, out IntPtr token);
+    [DllImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WTSDisconnectSession(IntPtr server, int id, [MarshalAs(UnmanagedType.Bool)] bool wait);
+
+    public static List<int> UnlockedSessions(string childSid)
     {
+        if (!Enumerate(IntPtr.Zero, 0, 1, out var buffer, out var count))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        var result = new List<int>();
         try
         {
-            var me = Environment.ProcessId;
-            foreach (var p in Process.GetProcessesByName("TooMuch"))
+            for (int i = 0; i < count; i++)
             {
+                var session = Marshal.PtrToStructure<Session>(buffer + i * Marshal.SizeOf<Session>());
+                if (session.Id == 0 || session.State != 0) continue;
+                if (!WTSQueryUserToken((uint)session.Id, out var token))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
                 try
                 {
-                    if (p.Id != me && p.SessionId == (int)sid) return true;
+                    using var identity = new WindowsIdentity(token);
+                    if (identity.User?.Value != childSid) continue;
                 }
-                catch { }
-                finally { p.Dispose(); }
+                finally { CloseHandle(token); }
+                // WTSSessionInfoEx: Windows 10/11 flags 0=locked, 1=unlocked.
+                if (!Query(IntPtr.Zero, session.Id, 25, out var info, out var size))
+                    throw new Win32Exception(Marshal.GetLastWin32Error());
+                try
+                {
+                    if (size < Marshal.SizeOf<Info>()) throw new InvalidOperationException("Incomplete WTS session information.");
+                    var value = Marshal.PtrToStructure<Info>(info);
+                    if (value.Level != 1) throw new InvalidOperationException("Unsupported WTS information level.");
+                    if (value.Data.Flags == 1) result.Add(session.Id);
+                }
+                finally { WTSFreeMemory(info); }
             }
         }
-        catch { }
-        return false;
+        finally { WTSFreeMemory(buffer); }
+        return result;
     }
 
-    private static void LaunchInSession(string exePath, uint sid)
+    public static void Disconnect(int id)
     {
-        IntPtr userToken = IntPtr.Zero;
-        try
-        {
-            if (!Native.WTSQueryUserToken(sid, out userToken) || userToken == IntPtr.Zero)
-                return;
-            var si = new Native.STARTUPINFO();
-            si.cb = Marshal.SizeOf<Native.STARTUPINFO>();
-            si.lpDesktop = @"winsta0\default";
-            var cmd = $"\"{exePath}\" --tray";
-            var pi = new Native.PROCESS_INFORMATION();
-            if (!Native.CreateProcessAsUser(
-                    userToken, null, cmd,
-                    IntPtr.Zero, IntPtr.Zero, false,
-                    0x00000400 /* CREATE_UNICODE_ENVIRONMENT */,
-                    IntPtr.Zero, null, ref si, out pi))
-                return;
-            Native.CloseHandle(pi.hThread);
-            Native.CloseHandle(pi.hProcess);
-        }
-        catch { }
-        finally
-        {
-            if (userToken != IntPtr.Zero) Native.CloseHandle(userToken);
-        }
+        if (!WTSDisconnectSession(IntPtr.Zero, id, false))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
     }
 }

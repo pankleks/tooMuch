@@ -16,6 +16,7 @@ public sealed class DayConfig
 
 public sealed class Policy
 {
+    [JsonPropertyName("time_zone")] public string TimeZone { get; set; } = "Europe/Warsaw";
     [JsonPropertyName("device_id")] public string DeviceId { get; set; } = "";
     [JsonPropertyName("version")] public int Version { get; set; } = 0;
     [JsonPropertyName("force_lock")] public bool ForceLock { get; set; }

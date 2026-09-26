@@ -15,7 +15,7 @@ public class AgentUsageTests
         DataDir = dir,
     };
 
-    static string UsageFile(string dir) => Path.Combine(dir, $"usage-{Agent.DateKey(DateTime.Now)}.json");
+    static string UsageFile(string dir) => Path.Combine(dir, $"usage-{Agent.DateKey(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw")))}.json");
 
     [Fact]
     public void AddActiveMinute_Increments_And_Persists()

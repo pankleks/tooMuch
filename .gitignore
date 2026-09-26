@@ -3,3 +3,5 @@ server/dist/
 data/
 *.log
 out/
+**/bin/
+**/obj/

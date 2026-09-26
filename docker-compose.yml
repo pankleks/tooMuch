@@ -6,6 +6,7 @@ services:
       - "3020:3020"
     environment:
       PORT: "3020"
+      TIME_ZONE: ${TIME_ZONE:-Europe/Warsaw}
       DATA_DIR: /data
       DIST_DIR: /data/dist
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}

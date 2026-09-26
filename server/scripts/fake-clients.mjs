@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { localDate } from "../dist/clock.js";
 
 const dir = mkdtempSync(join(tmpdir(), "st-e2e-"));
 const port = 3299 + Math.floor(Math.random() * 1000);
@@ -69,14 +70,14 @@ async function main() {
     if (!r.ok) throw new Error("force_lock failed");
 
     // 3. fake heartbeats + polling config (jak klient Windows)
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDate();
     for (const d of ids) {
       const h = { "x-device-token": d.token, "content-type": "application/json" };
       const c = await fetch(base + `/api/config/${d.device_id}`, { headers: { "x-device-token": d.token } });
       if (!c.ok) throw new Error("config poll failed");
       const cfg = await c.json();
       // simulate 304
-      const c2 = await fetch(base + `/api/config/${d.device_id}?v=${cfg.version}`, { headers: { "x-device-token": d.token } });
+      const c2 = await fetch(base + `/api/config/${d.device_id}?v=${cfg.version}&tz=${encodeURIComponent(cfg.time_zone)}`, { headers: { "x-device-token": d.token } });
       if (c2.status !== 304) throw new Error("expected 304, got " + c2.status);
       const hb = await fetch(base + "/api/heartbeat", { method: "POST", headers: h, body: JSON.stringify({ device_id: d.device_id, date: today, active_min: 50, locked: false }) });
       if (!hb.ok) throw new Error("heartbeat failed");

@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- WinExe: no console window. The Exe console subsystem pops a blinking
-         console at every logon (tray task) and is useless for service mode
-         (session 0 has no visible console anyway). Console.WriteLine
-         calls become harmless no-ops. -->
+    <!-- Background Windows service; no interactive console. -->
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
@@ -12,11 +9,13 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TooMuch</AssemblyName>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.2.5</Version>
-    <!-- single exe, 1 binary, 2 modes: service and tray -->
+    <Version>0.3.0-rc.1</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+  </ItemGroup>
 </Project>
