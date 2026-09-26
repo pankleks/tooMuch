@@ -177,6 +177,8 @@ function barWidth(today) {
 function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
 window.addEventListener("hashchange", ()=>{ renderTabs(); renderDetail(); });
+// installer command uses this server's actual origin, not a hardcoded hostname
+document.getElementById("installer-cmd").textContent = `.\\install.ps1 -ServerUrl ${location.origin}`;
 const modal = document.getElementById("installer-modal");
 document.getElementById("open-installer").onclick = ()=>{ modal.hidden = false; loadVersion(); };
 document.getElementById("close-installer").onclick = ()=>{ modal.hidden = true; };
