@@ -12,7 +12,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TooMuch</AssemblyName>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.2.3</Version>
+    <Version>0.2.4</Version>
     <!-- single exe, 1 binary, 2 modes: service and tray -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
