@@ -2,6 +2,13 @@ import { formatMinutes, formatQuota, formatTimeAgo } from "./format.js";
 import { deviceStatus } from "./device-status.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
+// Lucide icons (ISC-licensed), embedded locally so the admin PWA works offline.
+const ICONS = {
+  lock: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  unlock: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+  message: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>',
+  trash: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+};
 let devices = [];
 const drafts = new Map();
 const detailPanels = new Map();
@@ -102,15 +109,16 @@ function buildCard(d) {
   card.className = "card";
   const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
   const activePanel = detailPanels.get(d.device_id) ?? "history";
+  const lockLabel = d.force_lock ? "Unlock device" : "Lock device now";
   card.innerHTML = `
     <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
     <span class="muted">seen: ${esc(formatTimeAgo(d.last_seen))}</span></div>
     <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(today?today.quota:"?"))} (${esc(today?today.mode:"?")}) ${esc(pct(today?today.active_min:0, today?today.quota:"", today?today.mode:""))}</span>
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
     <div class="row action-row">
-      <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
-      <button data-act="message">Send message</button>
-      <button data-act="del" class="danger">Delete</button>
+      <button type="button" class="icon-button" data-act="lock" aria-label="${lockLabel}" title="${lockLabel}">${d.force_lock?ICONS.unlock:ICONS.lock}</button>
+      <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
+      <button type="button" class="icon-button danger" data-act="del" aria-label="Delete device" title="Delete device">${ICONS.trash}</button>
     </div>
     <div class="muted recent-messages">${(d.messages||[]).slice(-5).reverse().map(m=>`${esc(m.text)} — ${esc({pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[m.status]||m.status)}`).join("<br>")}</div>
     <div class="detail-tabs" role="tablist" aria-label="Device details">

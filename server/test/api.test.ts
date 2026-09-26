@@ -26,11 +26,16 @@ describe("api", () => {
     expect(page.body).toContain("id=\"list\"");
     expect(page.body).toContain("manifest.webmanifest");
     expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
+    expect(page.body).toContain('aria-label="Refresh devices"');
+    expect(page.body).toContain(".tabs{flex-wrap:wrap;overflow:visible");
 
     const adminScript = await app.inject({ method: "GET", url: "/admin-static/admin.js" });
     expect(adminScript.statusCode).toBe(200);
     expect(adminScript.body).toContain("History");
     expect(adminScript.body).toContain("Config");
+    expect(adminScript.body).toContain('aria-label="${lockLabel}"');
+    expect(adminScript.body).toContain('aria-label="Send message to child"');
+    expect(adminScript.body).toContain('aria-label="Delete device"');
 
     const manifest = await app.inject({ method: "GET", url: "/admin-static/manifest.webmanifest" });
     expect(manifest.statusCode).toBe(200);
