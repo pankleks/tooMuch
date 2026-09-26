@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- WinExe: no console window. Exe=console subsystem pops a blinking
+         console at every logon (tray task) and is useless for --service
+         (session 0 has no visible console anyway). Console.WriteLine
+         calls become harmless no-ops. -->
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -8,7 +12,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TooMuch</AssemblyName>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <!-- single exe, 1 binary, 2 modes: service and tray -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
