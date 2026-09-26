@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- WinExe: no console window. Exe=console subsystem pops a blinking
-         console at every logon (tray task) and is useless for --service
+    <!-- WinExe: no console window. The Exe console subsystem pops a blinking
+         console at every logon (tray task) and is useless for service mode
          (session 0 has no visible console anyway). Console.WriteLine
          calls become harmless no-ops. -->
     <OutputType>WinExe</OutputType>
