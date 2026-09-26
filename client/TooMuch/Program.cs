@@ -6,10 +6,28 @@ namespace TooMuch;
 
 internal static class Program
 {
+    [STAThread]
     static void Main(string[] args)
     {
-        if (args.FirstOrDefault() != "--service") return;
-        ServiceBase.Run(new AgentService());
+        switch (args.FirstOrDefault())
+        {
+            case "--service":
+                ServiceBase.Run(new AgentService());
+                break;
+            case "--tray":
+                ApplicationConfiguration.Initialize();
+                Application.Run(new StatusTrayContext());
+                break;
+            case "--message":
+                if (args.Length != 3 || !uint.TryParse(args[2], out var timeout))
+                {
+                    Environment.ExitCode = 2;
+                    break;
+                }
+                ApplicationConfiguration.Initialize();
+                Environment.ExitCode = MessageDialog.Run(args[1], timeout);
+                break;
+        }
     }
 
     internal static AgentConfig LoadConfig()

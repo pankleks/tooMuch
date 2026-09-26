@@ -1,10 +1,11 @@
 import { formatMinutes, formatQuota, formatTimeAgo } from "./format.js";
+import { deviceStatus } from "./device-status.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 let devices = [];
 const drafts = new Map();
+const detailPanels = new Map();
 let refreshSequence = 0;
-const STALE_MS = 5 * 60 * 1000;
 
 async function api(path, opts={}) {
   const r = await fetch(path, opts);
@@ -32,12 +33,6 @@ function pct(used, quotaStr, mode) {
   const lim = parseInt(quotaStr);
   if (!lim) return used > 0 ? "BLOCK" : "0%";
   return Math.min(100, Math.round(used/lim*100)) + "%";
-}
-
-function dotClass(d) {
-  if (d.force_lock) return "lock";
-  if (!d.last_seen || (Date.now() - Date.parse(d.last_seen)) > STALE_MS) return "stale";
-  return "ok";
 }
 
 function todaySummary(d) {
@@ -68,8 +63,9 @@ function renderTabs() {
   for (const d of devices) {
     const b = document.createElement("button");
     b.className = "tab" + (d.device_id===sel ? " active" : "");
-    b.innerHTML = `<span class="dot ${dotClass(d)}"></span><strong>${esc(d.name)}</strong><span class="tmin">${esc(todaySummary(d))}</span>`;
-    b.title = d.device_id;
+    const status = deviceStatus(d);
+    b.innerHTML = `<span class="dot ${status.dot}"></span><strong>${esc(d.name)}</strong><span class="tmin">${esc(todaySummary(d))}</span>`;
+    b.title = `${d.device_id} — ${status.label}${d.force_lock ? "\nParent lock is enabled" : ""}`;
     b.onclick = ()=>select(d.device_id);
     tabs.appendChild(b);
   }
@@ -93,8 +89,11 @@ async function refresh() {
     devices = ov.devices || [];
     st.textContent = `devices: ${devices.length}`;
     renderTabs();
-    if (!document.querySelector('#list input:focus')) renderDetail();
-  } catch(e){ st.textContent = "error: "+e.message; }
+    if (!document.querySelector("#list :focus")) renderDetail();
+  } catch(e){
+    st.textContent = navigator.onLine ? "server unavailable: " + e.message : "offline — reconnect to the tooMuch server";
+    if (!devices.length) document.getElementById("list").innerHTML = `<p class="muted">The admin panel is available offline, but device data and changes require a connection to the server.</p>`;
+  }
 }
 
 function buildCard(d) {
@@ -102,34 +101,71 @@ function buildCard(d) {
   const card = document.createElement("div");
   card.className = "card";
   const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
+  const activePanel = detailPanels.get(d.device_id) ?? "history";
   card.innerHTML = `
     <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
     <span class="muted">seen: ${esc(formatTimeAgo(d.last_seen))}</span></div>
     <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(today?today.quota:"?"))} (${esc(today?today.mode:"?")}) ${esc(pct(today?today.active_min:0, today?today.quota:"", today?today.mode:""))}</span>
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
-    <div class="row">
+    <div class="row action-row">
       <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
       <button data-act="message">Send message</button>
-      <span class="muted">Windows override the limit. Window format: 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
-      <button data-act="del" class="danger" style="margin-left:auto">Delete</button>
+      <button data-act="del" class="danger">Delete</button>
     </div>
-    <div class="muted">${(d.messages||[]).slice(-5).reverse().map(m=>`${esc(m.text)} — ${esc({pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[m.status]||m.status)}`).join("<br>")}</div>
-    <table><tr><th>Day</th><th>Limit [min]</th><th>Windows</th><th>Mode</th></tr>
+    <div class="muted recent-messages">${(d.messages||[]).slice(-5).reverse().map(m=>`${esc(m.text)} — ${esc({pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[m.status]||m.status)}`).join("<br>")}</div>
+    <div class="detail-tabs" role="tablist" aria-label="Device details">
+      <button type="button" class="detail-tab" role="tab" id="history-tab" aria-controls="history-panel" data-panel="history">History</button>
+      <button type="button" class="detail-tab" role="tab" id="config-tab" aria-controls="config-panel" data-panel="config">Config</button>
+    </div>
+    <section class="detail-panel" id="history-panel" role="tabpanel" aria-labelledby="history-tab" tabindex="0" data-panel-content="history">
+    <table class="responsive-table history-table"><thead><tr><th scope="col">Date</th><th scope="col">Mode</th><th scope="col">Quota</th><th scope="col">Used</th></tr></thead><tbody>
+    ${d.last7.map(x=>`<tr><td><span class="mobile-label">Date</span>${esc(x.date)}</td><td><span class="mobile-label">Mode</span>${esc(x.mode??"-")}</td><td><span class="mobile-label">Quota</span>${esc(formatQuota(x.quota??"-"))}</td><td><span class="mobile-label">Used</span>${formatMinutes(x.active_min)}</td></tr>`).join("")}
+    </tbody></table>
+    </section>
+    <section class="detail-panel" id="config-panel" role="tabpanel" aria-labelledby="config-tab" tabindex="0" data-panel-content="config">
+    <table class="responsive-table schedule-table"><thead><tr><th scope="col">Day</th><th scope="col">Limit [min]</th><th scope="col">Windows</th><th scope="col">Mode</th></tr></thead><tbody>
     ${[1,2,3,4,5,6,7].map(n=>{
       const c = d.config.days[String(n)];
       const draft = drafts.get(d.device_id)?.[String(n)];
-      return `<tr><td>${DAY_NAMES[n]}</td>
-      <td><input type="number" min="0" max="1440" data-day="${n}" data-f="limit" value="${esc(draft?.limit ?? c.limit_min)}"></td>
-      <td><input type="text" data-day="${n}" data-f="windows" value="${esc(draft?.windows ?? (c.windows||[]).map(w=>w.from+"-"+w.to).join(", "))}" placeholder="empty = limit mode"></td>
-      <td class="mode" data-day="${n}">${(c.windows&&c.windows.length)?"WINDOW":"LIMIT"}</td></tr>`;
+      return `<tr><td><span class="mobile-label">Day</span>${DAY_NAMES[n]}</td>
+      <td><span class="mobile-label">Limit [min]</span><input type="number" min="0" max="1440" aria-label="${DAY_NAMES[n]} daily limit in minutes" data-day="${n}" data-f="limit" value="${esc(draft?.limit ?? c.limit_min)}"></td>
+      <td><span class="mobile-label">Windows</span><input type="text" aria-label="${DAY_NAMES[n]} allowed windows" data-day="${n}" data-f="windows" value="${esc(draft?.windows ?? (c.windows||[]).map(w=>w.from+"-"+w.to).join(", "))}" placeholder="empty = limit mode"></td>
+      <td><span class="mobile-label">Mode</span><span class="mode-value" data-day="${n}">${(c.windows&&c.windows.length)?"WINDOW":"LIMIT"}</span></td></tr>`;
     }).join("")}
-    </table>
+    </tbody></table>
     <div class="row">
       <button data-act="save">Save days</button>
+      <span class="muted action-help">Windows override the limit. Use 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
     </div>
-    <table><tr><th>Date</th><th>Mode</th><th>Quota</th><th>Used</th></tr>
-    ${d.last7.map(x=>`<tr><td>${x.date}</td><td>${esc(x.mode??"-")}</td><td>${esc(formatQuota(x.quota??"-"))}</td><td>${formatMinutes(x.active_min)}</td></tr>`).join("")}
-    </table>`;
+    </section>`;
+  detailPanels.set(d.device_id, activePanel);
+  const detailTablist = card.querySelector(".detail-tabs");
+  const setPanel = panel => {
+    detailPanels.set(d.device_id, panel);
+    for (const tab of detailTablist.querySelectorAll("[role=tab]")) {
+      const selected = tab.dataset.panel === panel;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+    }
+    for (const section of card.querySelectorAll("[data-panel-content]"))
+      section.hidden = section.dataset.panelContent !== panel;
+  };
+  setPanel(activePanel);
+  detailTablist.addEventListener("click", event => {
+    const tab = event.target.closest("[role=tab]");
+    if (tab) setPanel(tab.dataset.panel);
+  });
+  detailTablist.addEventListener("keydown", event => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const tabs = [...detailTablist.querySelectorAll("[role=tab]")];
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    event.preventDefault();
+    const step = event.key === "ArrowRight" ? 1 : -1;
+    const next = tabs[(current + step + tabs.length) % tabs.length];
+    setPanel(next.dataset.panel);
+    next.focus();
+  });
   // live mode toggle
   card.addEventListener("input", () => {
     const draft = {};
@@ -143,7 +179,7 @@ function buildCard(d) {
     inp.addEventListener("input", ()=>{
       const day = inp.dataset.day;
       const lim = card.querySelector(`input[data-day="${day}"][data-f="limit"]`);
-      const mode = card.querySelector(`.mode[data-day="${day}"]`);
+       const mode = card.querySelector(`.mode-value[data-day="${day}"]`);
       const has = inp.value.trim().length>0;
       mode.textContent = has?"WINDOW":"LIMIT";
       lim.disabled = has;
@@ -218,4 +254,39 @@ modal.addEventListener("click", (e)=>{ if (e.target === modal) modal.hidden = tr
 document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") modal.hidden = true; });
 document.getElementById("refresh").onclick = refresh;
 document.getElementById("dl").onclick = ()=>{ window.location.href="/api/admin/client-download"; };
+
+const installButton = document.getElementById("install-app");
+let installPrompt = null;
+const secureContext = window.isSecureContext;
+const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+if (!secureContext || (isAppleMobile && !isStandalone)) installButton.hidden = false;
+
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  installPrompt = event;
+  installButton.hidden = false;
+});
+installButton.addEventListener("click", async () => {
+  if (!secureContext) {
+    alert("PWA installation requires HTTPS. Open this panel from a trusted HTTPS address first.");
+  } else if (installPrompt) {
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    installButton.hidden = true;
+  } else if (isAppleMobile && !isStandalone) {
+    alert("To install tooMuch, tap Share in Safari and choose Add to Home Screen.");
+  }
+});
+window.addEventListener("appinstalled", () => {
+  installButton.hidden = true;
+  installPrompt = null;
+});
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/service-worker.js").catch(error => console.warn("PWA offline shell registration failed:", error));
+}
+
 loadVersion(); refresh(); setInterval(refresh, 30000);

@@ -79,7 +79,7 @@ async function main() {
       // simulate 304
       const c2 = await fetch(base + `/api/config/${d.device_id}?v=${cfg.version}&tz=${encodeURIComponent(cfg.time_zone)}`, { headers: { "x-device-token": d.token } });
       if (c2.status !== 304) throw new Error("expected 304, got " + c2.status);
-      const hb = await fetch(base + "/api/heartbeat", { method: "POST", headers: h, body: JSON.stringify({ device_id: d.device_id, date: today, active_min: 50, locked: false }) });
+      const hb = await fetch(base + "/api/heartbeat", { method: "POST", headers: h, body: JSON.stringify({ device_id: d.device_id, date: today, active_min: 50, locked: false, counting: true }) });
       if (!hb.ok) throw new Error("heartbeat failed");
       const hj = await hb.json();
       if (d.device_id === ids[2].device_id && hj.force_lock !== true) throw new Error("force_lock not reflected in heartbeat");
@@ -90,6 +90,7 @@ async function main() {
     for (const dev of ov.devices) {
       if (dev.last7.length !== 7) throw new Error("last7 length");
       if ((dev.today?.active_min ?? 0) !== 50) throw new Error("today usage mismatch");
+      if (dev.counting !== true) throw new Error("timer counting status mismatch");
     }
     console.log("E2E OK: 3 fake clients, limits+window+force_lock verified");
   } catch (e) {

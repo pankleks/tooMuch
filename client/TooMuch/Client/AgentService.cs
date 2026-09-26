@@ -48,7 +48,14 @@ internal sealed class AgentService : ServiceBase
         try
         {
             using var agent = new Agent(config);
+            // Do not disconnect a freshly installed child session because the
+            // empty in-memory policy evaluates fail-closed before first poll.
+            // If the network is unavailable, Poll returns after timeout and
+            // the normal fail-closed enforcement uses whatever policy exists.
+            if (!agent.HasPolicy) await Poll(agent, ct);
             var messages = new SessionMessages(config, Log);
+            var publishedStatus = new StatusSnapshotStore();
+            var pipeServer = Task.Run(() => StatusPipe.Serve(config.ChildSid, publishedStatus.Read, Log, ct));
             var clock = new UsageClock();
             var watch = Stopwatch.StartNew();
             Task network = Task.CompletedTask;
@@ -64,13 +71,17 @@ internal sealed class AgentService : ServiceBase
                     if (oldDay != agent.TodayKey) clock.Reset();
                     var sessions = SessionGuard.UnlockedSessions(config.ChildSid);
                     var decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
-                    var seconds = clock.Sample(watch.Elapsed, sessions.Count > 0 && decision.State != State.Locked);
+                    var counting = sessions.Count > 0 && decision.State != State.Locked;
+                    var seconds = clock.Sample(watch.Elapsed, counting);
                     if (seconds > 0)
                     {
                         // Persistence errors must not bypass enforcement of the in-memory limit.
                         try { agent.AddSeconds(seconds); } catch (IOException ex) { Log(ex); }
                     }
                     decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
+                    // A tick can reach the limit; publish the post-tick state.
+                    counting = sessions.Count > 0 && decision.State != State.Locked;
+                    publishedStatus.Publish(ChildStatus.Create(agent.Policy, agent.LocalNow, agent.ActiveSeconds, DateTimeOffset.UtcNow));
                     if (decision.State == State.Locked)
                         foreach (var session in sessions) SessionGuard.Disconnect(session);
                     else messages.Tick(agent, sessions, ct);
@@ -86,7 +97,7 @@ internal sealed class AgentService : ServiceBase
                         else if (watch.Elapsed >= nextBeat)
                         {
                             nextBeat = watch.Elapsed + TimeSpan.FromSeconds(30);
-                            network = Beat(agent, decision.State == State.Locked, ct);
+                            network = Beat(agent, decision.State == State.Locked, counting, ct);
                         }
                     }
                 }
@@ -95,6 +106,7 @@ internal sealed class AgentService : ServiceBase
                 catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             }
             await network;
+            await pipeServer;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception ex)
@@ -107,6 +119,6 @@ internal sealed class AgentService : ServiceBase
 
     private async Task Poll(Agent agent, CancellationToken ct)
     { try { await agent.PollConfigAsync(ct); } catch (Exception ex) { if (!ct.IsCancellationRequested) Log(ex); } }
-    private async Task Beat(Agent agent, bool locked, CancellationToken ct)
-    { try { await agent.SendHeartbeatAsync(locked, ct); } catch (Exception ex) { if (!ct.IsCancellationRequested) Log(ex); } }
+    private async Task Beat(Agent agent, bool locked, bool counting, CancellationToken ct)
+    { try { await agent.SendHeartbeatAsync(locked, counting, ct); } catch (Exception ex) { if (!ct.IsCancellationRequested) Log(ex); } }
 }

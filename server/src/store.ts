@@ -132,7 +132,7 @@ export function weekdayOf(dateStr: string): string {
 export async function recordHeartbeat(
   dir: string,
   device: DeviceFile,
-  entry: { date: string; active_min: number; locked: boolean }
+  entry: { date: string; active_min: number; locked: boolean; counting?: boolean }
 ): Promise<DeviceFile> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) throw Object.assign(new Error("bad date"), { statusCode: 400 });
   const wd = weekdayOf(entry.date);
@@ -143,6 +143,9 @@ export async function recordHeartbeat(
   device.usage[entry.date] = { active_min, mode, quota: snapshotQuota(day, mode) };
   device.last_seen = new Date().toISOString();
   device.locked = entry.locked;
+  // Older clients omit this field; clear stale status rather than retaining it.
+  if (entry.counting === undefined) delete device.counting;
+  else device.counting = entry.counting;
   await saveDevice(dir, device);
   return device;
 }

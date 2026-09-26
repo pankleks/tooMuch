@@ -20,6 +20,34 @@ describe("api", () => {
     app = await buildApp();
   });
 
+  it("serves the responsive admin tabs and installable PWA shell", async () => {
+    const page = await app.inject({ method: "GET", url: "/admin" });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain("id=\"list\"");
+    expect(page.body).toContain("manifest.webmanifest");
+    expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
+
+    const adminScript = await app.inject({ method: "GET", url: "/admin-static/admin.js" });
+    expect(adminScript.statusCode).toBe(200);
+    expect(adminScript.body).toContain("History");
+    expect(adminScript.body).toContain("Config");
+
+    const manifest = await app.inject({ method: "GET", url: "/admin-static/manifest.webmanifest" });
+    expect(manifest.statusCode).toBe(200);
+    expect(manifest.headers["content-type"]).toContain("application/manifest+json");
+    expect(manifest.json().display).toBe("standalone");
+    expect(manifest.json().icons.some((icon: { purpose?: string }) => icon.purpose === "maskable")).toBe(true);
+    for (const iconPath of ["icon-192.png", "icon-512.png", "icon-512-maskable.png", "apple-touch-icon.png"]) {
+      const icon = await app.inject({ method: "GET", url: `/admin-static/icons/${iconPath}` });
+      expect(icon.statusCode).toBe(200);
+    }
+
+    const worker = await app.inject({ method: "GET", url: "/service-worker.js" });
+    expect(worker.statusCode).toBe(200);
+    expect(worker.headers["service-worker-allowed"]).toBe("/");
+    expect(worker.body).toContain("url.pathname.startsWith(\"/api/\")");
+  });
+
   it("register -> config 304/200 -> heartbeat -> overview", async () => {
     const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "DESKTOP-JAS" } });
     expect(reg.statusCode).toBe(200);
@@ -44,7 +72,7 @@ describe("api", () => {
     const todayStr = localDate();
     const hb = await app.inject({
       method: "POST", url: "/api/heartbeat", headers: h,
-      payload: { device_id, date: todayStr, active_min: 45, locked: false },
+      payload: { device_id, date: todayStr, active_min: 45, locked: false, counting: true },
     });
     expect(hb.statusCode).toBe(200);
 
@@ -56,7 +84,27 @@ describe("api", () => {
     expect(body.devices.length).toBe(2);
     const me = body.devices.find((d: { device_id: string }) => d.device_id === device_id);
     expect(me.today.active_min).toBe(45);
+    expect(me.counting).toBe(true);
     expect(me.last7.length).toBe(7);
+  });
+
+  it("reports the latest counting state and clears it for legacy heartbeats", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "timer-status" } });
+    const { device_id, token } = reg.json();
+    const headers = { "x-device-token": token };
+    const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const send = (counting?: boolean) => app.inject({
+      method: "POST", url: "/api/heartbeat", headers,
+      payload: { device_id, date: localDate(), active_min: 1, locked: false, ...(counting === undefined ? {} : { counting }) },
+    });
+    const overviewCounting = async () => (await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth })).json().devices[0].counting;
+
+    expect((await send(true)).statusCode).toBe(200);
+    expect(await overviewCounting()).toBe(true);
+    expect((await send(false)).statusCode).toBe(200);
+    expect(await overviewCounting()).toBe(false);
+    expect((await send()).statusCode).toBe(200);
+    expect(await overviewCounting()).toBe(null);
   });
 
   it("admin can set per-day limits + windows override, validation enforced", async () => {

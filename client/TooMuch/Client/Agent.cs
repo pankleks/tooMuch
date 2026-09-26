@@ -28,6 +28,7 @@ public sealed class Agent : IDisposable
     public Policy Policy { get; private set; } = new();
     public double ActiveSeconds { get; private set; }
     public int ActiveMinToday => (int)(ActiveSeconds / 60);
+    public bool HasPolicy => Policy.DeviceId == _cfg.DeviceId && Policy.Days.Count == 7;
     public DateTime LocalNow => TimeZoneInfo.ConvertTimeFromUtc(utcNow(),
         TimeZoneInfo.FindSystemTimeZoneById(Policy.TimeZone));
     public string TodayKey { get; private set; } = "";
@@ -137,12 +138,12 @@ public sealed class Agent : IDisposable
         return true;
     }
 
-    public async Task SendHeartbeatAsync(bool locked, CancellationToken ct)
+    public async Task SendHeartbeatAsync(bool locked, bool counting, CancellationToken ct)
     {
         var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/heartbeat";
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Add("X-Device-Token", _cfg.Token);
-        req.Content = JsonContent.Create(new { device_id = _cfg.DeviceId, date = TodayKey, active_min = (double)ActiveMinToday, locked });
+        req.Content = JsonContent.Create(new { device_id = _cfg.DeviceId, date = TodayKey, active_min = (double)ActiveMinToday, locked, counting });
         using var res = await _http.SendAsync(req, ct);
         res.EnsureSuccessStatusCode();
     }

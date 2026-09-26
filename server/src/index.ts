@@ -21,6 +21,8 @@ import { recentDates, timeZone } from "./clock.js";
 import { randomUUID } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 3020);
+const TLS_CERT_FILE = process.env.TLS_CERT_FILE?.trim();
+const TLS_KEY_FILE = process.env.TLS_KEY_FILE?.trim();
 function adminPassword(): string {
   return process.env.ADMIN_PASSWORD ?? "changeme";
 }
@@ -48,7 +50,12 @@ async function deviceAuth(req: FastifyRequest, deviceId: string): Promise<Return
 }
 
 export async function buildApp(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  if (Boolean(TLS_CERT_FILE) !== Boolean(TLS_KEY_FILE))
+    throw new Error("Set both TLS_CERT_FILE and TLS_KEY_FILE, or leave both unset.");
+  const https = TLS_CERT_FILE && TLS_KEY_FILE
+    ? { cert: await fs.readFile(TLS_CERT_FILE), key: await fs.readFile(TLS_KEY_FILE) }
+    : undefined;
+  const app = Fastify({ logger: false, ...(https ? { https } : {}) });
   timeZone();
   // Serialize complete read-modify-write requests in this single server process.
   // Atomic rename alone does not prevent a heartbeat from undoing an admin update.
@@ -128,18 +135,20 @@ export async function buildApp(): Promise<FastifyInstance> {
             date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
             active_min: { type: "number", minimum: 0, maximum: 100000 },
             locked: { type: "boolean" },
+            counting: { type: "boolean" },
           },
         },
       },
     },
     async (req, reply) => {
-      const body = req.body as { device_id: string; date: string; active_min: number; locked?: boolean };
+      const body = req.body as { device_id: string; date: string; active_min: number; locked?: boolean; counting?: boolean };
       const device = await deviceAuth(req, body.device_id);
       if (!device) return reply.code(401).send({ error: "unauthorized" });
       await recordHeartbeat(dataDir(), device, {
         date: body.date,
         active_min: body.active_min,
         locked: body.locked ?? false,
+        counting: body.counting,
       });
       return reply.send({ ok: true, version: device.config.version, force_lock: device.config.force_lock });
     }
@@ -208,6 +217,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         version: d.config.version,
         force_lock: d.config.force_lock,
         locked: d.locked ?? null,
+        counting: d.counting ?? null,
         today: d.usage[days[0]] ?? null,
         last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
         config: d.config,
@@ -270,6 +280,15 @@ export async function buildApp(): Promise<FastifyInstance> {
     return reply.sendFile("admin.html", publicDir);
   });
 
+  // Service workers must be same-origin and need root scope to control /admin.
+  app.get("/service-worker.js", async (_req, reply) => {
+    return reply
+      .header("content-type", "application/javascript; charset=utf-8")
+      .header("cache-control", "no-cache")
+      .header("service-worker-allowed", "/")
+      .sendFile("service-worker.js", publicDir);
+  });
+
   return app;
 }
 
@@ -279,5 +298,6 @@ if (process.env.VITEST !== "true" && process.argv[1] && import.meta.url === path
     console.warn("[warn] ADMIN_PASSWORD not set, using default 'changeme' – set it in .env");
   }
   await app.listen({ port: PORT, host: "0.0.0.0" });
-  console.log(`tooMuch-server listening on :${PORT}`);
+  const protocol = TLS_CERT_FILE && TLS_KEY_FILE ? "https" : "http";
+  console.log(`tooMuch-server listening on ${protocol}://0.0.0.0:${PORT}`);
 }

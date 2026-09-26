@@ -31,6 +31,7 @@ export interface DeviceFile {
   token: string; // hex, stored plain on server (LAN home use); clients send via X-Device-Token
   last_seen: string | null; // ISO
   locked?: boolean;
+  counting?: boolean;
   config: ServerConfig;
   usage: Record<string, UsageEntry>; // key YYYY-MM-DD
 }

@@ -77,6 +77,11 @@ foreach ($folder in @($InstallDir, $dataDir)) {
     $rule = New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.SecurityIdentifier]$sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
     $acl.AddAccessRule($rule)
   }
+  if ($folder -eq $InstallDir) {
+    # The child may execute the display-only tray, but cannot modify the binary.
+    $trayRule = New-Object Security.AccessControl.FileSystemAccessRule([Security.Principal.SecurityIdentifier]$childSid, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $acl.AddAccessRule($trayRule)
+  }
   Set-Acl $folder $acl
   # Remove old explicit per-user grants from files left by tray versions.
   Get-ChildItem $folder -Recurse -Force | ForEach-Object {
@@ -99,4 +104,12 @@ sc.exe failure TooMuch reset= 86400 actions= restart/5000/restart/10000/restart/
 if ($LASTEXITCODE -ne 0) { throw "Service recovery configuration failed." }
 Start-Service TooMuch
 (Get-Service TooMuch).WaitForStatus('Running', [TimeSpan]::FromSeconds(15))
+$trayAction = New-ScheduledTaskAction -Execute (Join-Path $InstallDir 'TooMuch.exe') -Argument '--tray'
+$trayTrigger = New-ScheduledTaskTrigger -AtLogOn -User $account
+$trayPrincipal = New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive -RunLevel Limited
+$traySettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName 'TooMuchTray' -Action $trayAction -Trigger $trayTrigger -Principal $trayPrincipal -Settings $traySettings -Force | Out-Null
+Get-ScheduledTask -TaskName 'TooMuchTray' -ErrorAction Stop | Out-Null
+try { Start-ScheduledTask -TaskName 'TooMuchTray' -ErrorAction Stop }
+catch { Write-Warning 'Tray status will start at the protected user’s next logon.' }
 Write-Host "OK: $DeviceId installed for $account. Edit limits at $ServerUrl/admin"

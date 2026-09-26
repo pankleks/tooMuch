@@ -4,7 +4,16 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>tooMuch – admin</title>
+<meta name="theme-color" content="#121212" />
+<meta name="description" content="Manage tooMuch device schedules, usage and parental controls." />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="/admin-static/manifest.webmanifest" />
+<link rel="icon" type="image/png" sizes="192x192" href="/admin-static/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/admin-static/icons/apple-touch-icon.png" />
 <style>
+*{box-sizing:border-box}
 :root{color-scheme:dark}
 body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#e8e8e8;background:#121212}
 .card{border:1px solid #333;border-radius:10px;padding:16px 20px;margin:12px 0;background:#1c1c1c}
@@ -12,43 +21,85 @@ body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:
 .card .row{margin:8px 0}
 .card .row:first-child{margin-top:0}
 table{border-collapse:collapse;width:100%;margin-top:14px}
-.section-label{margin:18px 0 0}
 th,td{border:1px solid #333;padding:6px 8px;font-size:14px;text-align:left}
 th{background:#242424}
 .bar{height:10px;background:#333;border-radius:6px;overflow:hidden;min-width:120px}
 .bar>i{display:block;height:100%;background:#2a9d48}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;background:#333;color:#eee}
-.badge.lock{background:#7a1f1f;color:#fff}.badge.new{background:#8a6d1c;color:#fff}
-input[type=number]{width:80px}input[type=text]{width:180px}
-input{background:#242424;color:#eee;border:1px solid #444;border-radius:6px;padding:5px 8px}
+.badge.lock{background:#7a1f1f;color:#fff}
+input{background:#242424;color:#eee;border:1px solid #444;border-radius:6px;padding:7px 9px;min-height:40px}
+input[type=number]{width:90px}input[type=text]{width:180px}
 input:disabled{opacity:.45}
-button{padding:6px 12px;border-radius:8px;border:1px solid #555;background:#2a2a2a;color:#eee;cursor:pointer}
+button{padding:8px 12px;min-height:40px;border-radius:8px;border:1px solid #555;background:#2a2a2a;color:#eee;cursor:pointer;font:inherit}
 button:hover{background:#383838}
+button:focus-visible,input:focus-visible{outline:2px solid #7db8ff;outline-offset:2px}
 button.danger{background:#c62f2f;color:#fff;border-color:#a00}
 .muted{color:#999;font-size:13px}
-code{background:#242424;padding:1px 6px;border-radius:4px}
+code{background:#242424;padding:1px 6px;border-radius:4px;overflow-wrap:anywhere}
 a{color:#7db8ff}
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.tab{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;border:1px solid #444;background:#242424;color:#eee;cursor:pointer;font-size:14px}
+.tab{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;border:1px solid #444;background:#242424;color:#eee;cursor:pointer;font-size:14px;white-space:nowrap}
 .tab:hover{background:#2e2e2e}
 .tab.active{border-color:#7db8ff;background:#26334d}
-.tab .dot{width:10px;height:10px;border-radius:50%;flex:none}
-.dot.ok{background:#2a9d48}.dot.lock{background:#e05555}.dot.stale{background:#777}
+.tab .dot,.status-legend .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.dot.counting{background:#2a9d48}.dot.paused{background:#e79525}.dot.offline{background:#777}
+.status-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 12px}
+.status-legend span{display:inline-flex;align-items:center;gap:6px}
 .tab .tmin{color:#999;font-size:12px}
 .header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.header h1{margin:12px 0;flex:1}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100}
+.header-brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.header-brand img{width:52px;height:52px;object-fit:contain;flex:none}
+.header-brand h1{margin:12px 0;flex:1}
+.detail-tabs{display:flex;gap:8px;border-bottom:1px solid #3a3a3a;margin:18px 0 12px}
+.detail-tab{flex:0 0 auto;min-width:120px;border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:#aaa}
+.detail-tab:hover{background:#242424;color:#eee}
+.detail-tab[aria-selected="true"]{border-bottom-color:#7db8ff;color:#fff;background:#242a36}
+.detail-panel[hidden]{display:none}
+.responsive-table .mobile-label{display:none}
+.action-row{align-items:center}
+.action-help{flex:1 1 260px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .modal-overlay[hidden]{display:none}
-.modal{background:#1c1c1c;border:1px solid #444;border-radius:12px;padding:28px 32px;max-width:560px;width:calc(100% - 48px)}
+.modal{background:#1c1c1c;border:1px solid #444;border-radius:12px;padding:28px 32px;max-width:560px;width:100%;max-height:90dvh;overflow:auto}
 .modal h2{margin-top:0}
 .modal ol{padding-left:24px;font-size:14px;line-height:1.55}
 .modal li+li{margin-top:8px}
-.modal code{background:#242424;padding:3px 8px;border-radius:4px;overflow-wrap:anywhere}
+.modal code{background:#242424;padding:3px 8px;overflow-wrap:anywhere}
+@media(max-width:640px){
+  body{margin:0 auto;padding:10px}
+  .card{padding:12px;margin:8px 0}
+  .header{gap:8px}
+  .header-brand{flex:1 1 100%}
+  .header-brand img{width:44px;height:44px}
+  .header-brand h1{font-size:22px;margin:8px 0;min-width:0}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:thin}
+  .tab{flex:0 0 auto;max-width:88vw;padding:8px 10px}
+  .tab strong{max-width:45vw;overflow:hidden;text-overflow:ellipsis}
+  .status-legend{gap:8px 14px}
+  .detail-tabs{position:sticky;top:0;z-index:2;background:#1c1c1c;padding-top:4px}
+  .detail-tab{flex:1;min-width:0}
+  .action-row{align-items:stretch}
+  .action-row button{flex:1 1 42%;}
+  .action-row button.danger{margin-left:0!important}
+  .responsive-table,.responsive-table tbody{display:block;width:100%}
+  .responsive-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .responsive-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px;padding:12px;border:1px solid #333;border-radius:8px;background:#202020}
+  .responsive-table td{display:flex;flex-direction:column;justify-content:center;gap:4px;min-width:0;padding:2px;border:0}
+  .responsive-table td:first-child{grid-column:1/-1;font-weight:700}
+  .responsive-table .mobile-label{display:block;color:#999;font-size:12px;font-weight:400}
+  .responsive-table input[type=number],.responsive-table input[type=text]{width:100%;min-width:0;font-size:16px}
+  .schedule-table td:last-child{grid-column:1/-1}
+  .modal{padding:20px}
+}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>tooMuch – parent panel</h1>
+  <div class="header-brand">
+    <img src="/admin-static/icons/icon-192.png" alt="" aria-hidden="true" />
+    <h1>tooMuch – parent panel</h1>
+  </div>
+  <button id="install-app" type="button" hidden>Install app</button>
   <button id="open-installer">Client Installer</button>
 </div>
 <div class="modal-overlay" id="installer-modal" hidden>
@@ -69,14 +120,19 @@ a{color:#7db8ff}
   </div>
 </div>
 
-<div class="card">
+<main class="card">
   <div class="row">
     <button id="refresh">Refresh</button>
     <span id="status" class="muted"></span>
   </div>
   <div class="tabs" id="tabs"></div>
+  <div class="status-legend muted" aria-label="Device status legend">
+    <span><i class="dot counting"></i>Online, timer counting</span>
+    <span><i class="dot paused"></i>Online, timer paused</span>
+    <span><i class="dot offline"></i>Offline (no check-in for 5+ minutes)</span>
+  </div>
   <div id="list"></div>
-</div>
+</main>
 
 <script type="module" src="/admin-static/admin.js"></script>
 </body>
