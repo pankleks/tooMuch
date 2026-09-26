@@ -72,8 +72,26 @@ public sealed class Agent : IDisposable
         if (key != TodayKey) { TodayKey = key; ActiveMinToday = 0; SaveUsage(); }
     }
 
+    /// <summary>
+    /// Reload usage from disk (written by the tray process in the user session).
+    /// The service loop calls this before each heartbeat; never throws.
+    /// </summary>
+    public void ReloadUsage()
+    {
+        try
+        {
+            var up = UsagePath(TodayKey);
+            if (File.Exists(up) && JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(up)) is { } m
+                && m.TryGetValue("active_min", out var v)) ActiveMinToday = v;
+        }
+        catch { }
+    }
+
     public void AddActiveMinute()
     {
+        // merge with disk first: service and tray (and several sessions)
+        // share the day file, last-writer-wins must not lose minutes
+        ReloadUsage();
         ActiveMinToday++;
         SaveUsage();
     }

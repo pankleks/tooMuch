@@ -63,7 +63,6 @@ internal static class Program
         Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
         var lastPoll = DateTime.MinValue;
         var lastBeat = DateTime.MinValue;
-        var lastMinute = DateTime.Now;
         var lastWatchdog = DateTime.MinValue;
         var wasLocked = false;
         Console.WriteLine($"tooMuch service: {cfg.DeviceId} @ {cfg.ServerUrl}");
@@ -73,14 +72,10 @@ internal static class Program
             try
             {
                 agent.TickDayRollover();
-                // active-only counting
-                var idle = Native.IdleTime();
-                var idleThreshold = TimeSpan.FromSeconds(Math.Max(30, agent.Policy.IdleThresholdSec));
-                if (DateTime.Now - lastMinute >= TimeSpan.FromMinutes(1))
-                {
-                    lastMinute = DateTime.Now;
-                    if (!agent.Policy.CountOnlyActive || idle < idleThreshold) agent.AddActiveMinute();
-                }
+                // NOTE: no active-minute counting here. GetLastInputInfo in
+                // session 0 never sees user input, so with count_only_active
+                // nothing would ever accumulate. Counting lives in the tray
+                // (user session); usage is reloaded from disk for heartbeat.
 
                 var decision = PolicyEvaluator.Evaluate(agent.Policy, DateTime.Now, agent.ActiveMinToday);
                 var pollInterval = decision.State == State.Warning ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(30);
@@ -108,6 +103,7 @@ internal static class Program
                 if (DateTime.Now - lastBeat >= TimeSpan.FromMinutes(1))
                 {
                     lastBeat = DateTime.Now;
+                    agent.ReloadUsage(); // counted by the tray in user sessions
                     try { await agent.SendHeartbeatAsync(decision.State == State.Locked, cts.Token); }
                     catch (Exception ex) { Console.WriteLine("heartbeat failed: " + ex.Message); }
                 }
@@ -148,11 +144,22 @@ internal static class Program
         var timer = new System.Windows.Forms.Timer { Interval = 15000 };
         var overlays = new List<Form>(); // one fullscreen overlay per monitor
         var lockedNow = false; // Alt+F4 guard below: user close cancelled while locked
+        var lastMinute = DateTime.Now;
         timer.Tick += async (_, _) =>
         {
             try
             {
                 agent.TickDayRollover();
+                // active-minute counting lives here: this process runs in the
+                // user session, where GetLastInputInfo reflects real activity
+                // (the SYSTEM loop in session 0 would see infinite idle).
+                if (DateTime.Now - lastMinute >= TimeSpan.FromMinutes(1))
+                {
+                    lastMinute = DateTime.Now;
+                    var idle = Native.IdleTime();
+                    var idleThreshold = TimeSpan.FromSeconds(Math.Max(30, agent.Policy.IdleThresholdSec));
+                    if (!agent.Policy.CountOnlyActive || idle < idleThreshold) agent.AddActiveMinute();
+                }
                 try { await agent.PollConfigAsync(CancellationToken.None); } catch { }
                 var d = PolicyEvaluator.Evaluate(agent.Policy, DateTime.Now, agent.ActiveMinToday);
                 lockedNow = d.State == State.Locked;
