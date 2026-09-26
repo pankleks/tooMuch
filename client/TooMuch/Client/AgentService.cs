@@ -48,6 +48,7 @@ internal sealed class AgentService : ServiceBase
         try
         {
             using var agent = new Agent(config);
+            var messages = new SessionMessages(config, Log);
             var clock = new UsageClock();
             var watch = Stopwatch.StartNew();
             Task network = Task.CompletedTask;
@@ -72,6 +73,7 @@ internal sealed class AgentService : ServiceBase
                     decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
                     if (decision.State == State.Locked)
                         foreach (var session in sessions) SessionGuard.Disconnect(session);
+                    else messages.Tick(agent, sessions, ct);
 
                     // HTTP cannot delay session enforcement. Only one network operation at a time.
                     if (network.IsCompleted)

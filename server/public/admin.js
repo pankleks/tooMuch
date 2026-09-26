@@ -107,9 +107,11 @@ function buildCard(d) {
     <div class="bar" style="flex:1"><i style="width:${barWidth(today)}%"></i></div></div>
     <div class="row">
       <button data-act="lock">${d.force_lock?"Unlock":"Lock now"}</button>
+      <button data-act="message">Send message</button>
       <span class="muted">Windows override the limit. Window format: 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
       <button data-act="del" class="danger" style="margin-left:auto">Delete</button>
     </div>
+    <div class="muted">${(d.messages||[]).slice(-5).reverse().map(m=>`${esc(m.text)} — ${esc({pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[m.status]||m.status)}`).join("<br>")}</div>
     <table><tr><th>Day</th><th>Limit [min]</th><th>Windows</th><th>Mode</th></tr>
     ${[1,2,3,4,5,6,7].map(n=>{
       const c = d.config.days[String(n)];
@@ -149,6 +151,17 @@ function buildCard(d) {
   card.querySelector('[data-act="lock"]').onclick = async ()=>{
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({force_lock: !d.force_lock})});
     refresh();
+  };
+  card.querySelector('[data-act="message"]').onclick = async ()=>{
+    const text = prompt("Message to your child (up to 1000 characters; valid for 15 minutes):");
+    if (text === null || !text.trim()) return;
+    if (text.length > 1000) { alert("Maximum 1000 characters."); return; }
+    try {
+      await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}/messages`, {
+        method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({text})
+      });
+      await refresh();
+    } catch(e) { alert("Send failed: " + e.message); }
   };
   card.querySelector('[data-act="del"]').onclick = async ()=>{
     if (!confirm(`Delete device "${d.name}" (${d.device_id})?\n\nThis removes its config, limits and history. The client on that PC will fail authentication until you reinstall it.`)) return;

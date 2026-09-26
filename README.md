@@ -9,6 +9,24 @@ The old `TooMuch` / `TooMuchTray` scheduled tasks are removed during migration.
 This version has no tray or fullscreen overlays. Closing a user application cannot
 stop accounting or enforcement.
 
+### Messages and time warnings
+
+The admin panel's **Send message** button queues a message for the child's unlocked
+session (up to 1000 characters, default expiry 15 minutes). Statuses distinguish
+pending, delivered to the client, confirmed with Windows' OK button, and expired.
+Delivered does not prove the dialog was seen; confirmation does not prove it was read.
+The service polls messages every 10 seconds while the child is active and not blocked.
+Dialogs use `WTSSendMessage` on background tasks, so waiting for a response never
+pauses accounting or enforcement. A dialog times out after at most 60 seconds;
+timeout is not confirmation. Unconfirmed dialogs are not repeatedly shown during
+the same service run, but may be retried after a restart until expiry.
+
+The service also warns once when at most 10 minutes remain, using actual remaining
+time if a limit was shortened. Daily limits use usage; allowed windows use their end
+time. Adjacent windows are treated as continuous. Automatic warnings work offline
+from cached policy; shown warning keys are persisted to avoid repeats after restart.
+Windows provides the standard OK button; no custom tray UI is required.
+
 The protected account is recorded by SID. Installation under UAC discovers the
 owner of Explorer in the installer's interactive session, rather than the admin
 credentials used for elevation. Ambiguous discovery requires

@@ -25,6 +25,7 @@ export interface UsageEntry {
 }
 
 export interface DeviceFile {
+  messages?: ParentMessage[];
   device_id: string;
   name: string;
   token: string; // hex, stored plain on server (LAN home use); clients send via X-Device-Token
@@ -32,6 +33,14 @@ export interface DeviceFile {
   locked?: boolean;
   config: ServerConfig;
   usage: Record<string, UsageEntry>; // key YYYY-MM-DD
+}
+
+export interface ParentMessage {
+  id: string;
+  text: string;
+  created_at: string;
+  expires_at: string;
+  status: "pending" | "delivered" | "confirmed";
 }
 
 export const WEEKDAYS = ["1", "2", "3", "4", "5", "6", "7"] as const;

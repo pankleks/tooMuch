@@ -9,7 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>TooMuch</AssemblyName>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.3.0-rc.1</Version>
+    <Version>0.3.0-rc.2</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

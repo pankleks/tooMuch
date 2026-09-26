@@ -81,4 +81,19 @@ internal static class SessionGuard
         if (!WTSDisconnectSession(IntPtr.Zero, id, false))
             throw new Win32Exception(Marshal.GetLastWin32Error());
     }
+
+    [DllImport("wtsapi32.dll", EntryPoint = "WTSSendMessageW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SendMessage(IntPtr server, int session, string title, int titleBytes,
+        string message, int messageBytes, uint style, uint timeout, out uint response,
+        [MarshalAs(UnmanagedType.Bool)] bool wait);
+
+    // Blocking native call: caller MUST run this off the enforcement thread.
+    public static bool ShowMessage(int session, string title, string text, uint timeout)
+    {
+        if (!SendMessage(IntPtr.Zero, session, title, title.Length * 2, text, text.Length * 2,
+            0x00010040, timeout, out var response, true))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        return response == 1; // IDOK; timeout/dismissal is not confirmation.
+    }
 }

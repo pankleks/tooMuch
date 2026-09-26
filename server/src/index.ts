@@ -18,6 +18,7 @@ import {
 } from "./store.js";
 import { validateDays } from "./types.js";
 import { recentDates, timeZone } from "./clock.js";
+import { randomUUID } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 3020);
 function adminPassword(): string {
@@ -144,6 +145,46 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   );
 
+  app.post<{ Params: { id: string }; Body: { text: string; ttl_min?: number } }>(
+    "/api/admin/devices/:id/messages", {
+      onRequest: app.basicAuth,
+      schema: { body: { type: "object", required: ["text"], additionalProperties: false,
+        properties: { text: { type: "string", minLength: 1, maxLength: 1000 }, ttl_min: { type: "integer", minimum: 1, maximum: 1440 } } } },
+    }, async (req, reply) => {
+      const device = await loadDevice(dataDir(), req.params.id);
+      if (!device) return reply.code(404).send({ error: "not found" });
+      if (!req.body.text.trim()) return reply.code(400).send({ error: "message is empty" });
+      const now = Date.now();
+      device.messages = (device.messages ?? []).filter(m => Date.parse(m.expires_at) > now || m.status === "confirmed");
+      if (device.messages.filter(m => m.status !== "confirmed").length >= 20)
+        return reply.code(409).send({ error: "too many pending messages" });
+      const message = { id: randomUUID(), text: req.body.text.trim(), created_at: new Date(now).toISOString(),
+        expires_at: new Date(now + (req.body.ttl_min ?? 15) * 60000).toISOString(), status: "pending" as const };
+      device.messages = [...device.messages.slice(-99), message];
+      await saveDevice(dataDir(), device);
+      return message;
+    });
+
+  app.get<{ Params: { id: string } }>("/api/devices/:id/messages", async (req, reply) => {
+    const device = await deviceAuth(req, req.params.id);
+    if (!device) return reply.code(401).send({ error: "unauthorized" });
+    return { messages: (device.messages ?? []).filter(m => m.status !== "confirmed" && Date.parse(m.expires_at) > Date.now()) };
+  });
+
+  app.post<{ Params: { id: string; messageId: string }; Body: { status: "delivered" | "confirmed" } }>(
+    "/api/devices/:id/messages/:messageId", {
+      schema: { body: { type: "object", required: ["status"], additionalProperties: false,
+        properties: { status: { type: "string", enum: ["delivered", "confirmed"] } } } },
+    }, async (req, reply) => {
+      const device = await deviceAuth(req, req.params.id);
+      if (!device) return reply.code(401).send({ error: "unauthorized" });
+      const message = device.messages?.find(m => m.id === req.params.messageId);
+      if (!message) return reply.code(404).send({ error: "not found" });
+      if (message.status !== "confirmed") message.status = req.body.status;
+      await saveDevice(dataDir(), device);
+      return { ok: true };
+    });
+
   // ---- public client version (for future auto-update) ----
   app.get("/api/client-version", async (_req, reply) => {
     try {
@@ -170,6 +211,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         today: d.usage[days[0]] ?? null,
         last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
         config: d.config,
+        messages: (d.messages ?? []).map(m => ({ ...m, status: m.status !== "confirmed" && Date.parse(m.expires_at) <= Date.now() ? "expired" : m.status })),
       })),
     };
   });

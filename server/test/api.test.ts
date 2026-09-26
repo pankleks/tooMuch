@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -123,6 +123,37 @@ describe("api", () => {
     const response = await app.inject({ method: "GET", url: `/api/config/${device_id}?v=1&tz=UTC`, headers: { "x-device-token": token } });
     expect(response.statusCode).toBe(200);
     expect(response.json().time_zone).toBe("Europe/Warsaw");
+  });
+
+  it("parent messages require auth, stay queued, expire and preserve confirmation", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "messages" } });
+    const { device_id, token } = reg.json();
+    const admin = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const child = { "x-device-token": token };
+    const send = `/api/admin/devices/${device_id}/messages`;
+    const inbox = `/api/devices/${device_id}/messages`;
+    expect((await app.inject({ method: "POST", url: send, payload: { text: "Hello" } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: send, headers: admin, payload: { text: " " } })).statusCode).toBe(400);
+    const message = await app.inject({ method: "POST", url: send, headers: admin, payload: { text: "Dinner", ttl_min: 1 } });
+    expect(message.statusCode).toBe(200);
+    const id = message.json().id;
+    expect((await app.inject({ method: "GET", url: inbox })).statusCode).toBe(401);
+    const queue = await app.inject({ method: "GET", url: inbox, headers: child });
+    expect(queue.json().messages[0].text).toBe("Dinner");
+    expect(queue.json().messages[0].status).toBe("pending");
+    for (const status of ["delivered", "confirmed", "delivered"]) {
+      expect((await app.inject({ method: "POST", url: `${inbox}/${id}`, headers: child, payload: { status } })).statusCode).toBe(200);
+    }
+    expect((await app.inject({ method: "GET", url: inbox, headers: child })).json().messages).toEqual([]);
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: admin });
+    expect(overview.json().devices[0].messages[0].status).toBe("confirmed");
+    await app.inject({ method: "POST", url: send, headers: admin, payload: { text: "Expires", ttl_min: 1 } });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 61000);
+    try {
+      expect((await app.inject({ method: "GET", url: inbox, headers: child })).json().messages).toEqual([]);
+      const expired = await app.inject({ method: "GET", url: "/api/admin/overview", headers: admin });
+      expect(expired.json().devices[0].messages[1].status).toBe("expired");
+    } finally { clock.mockRestore(); }
   });
 
   it("wrong token -> 401", async () => {
