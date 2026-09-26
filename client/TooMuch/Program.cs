@@ -64,6 +64,7 @@ internal static class Program
         var lastPoll = DateTime.MinValue;
         var lastBeat = DateTime.MinValue;
         var lastMinute = DateTime.Now;
+        var lastWatchdog = DateTime.MinValue;
         var wasLocked = false;
         Console.WriteLine($"tooMuch service: {cfg.DeviceId} @ {cfg.ServerUrl}");
 
@@ -110,6 +111,18 @@ internal static class Program
                     try { await agent.SendHeartbeatAsync(decision.State == State.Locked, cts.Token); }
                     catch (Exception ex) { Console.WriteLine("heartbeat failed: " + ex.Message); }
                 }
+
+                // child can kill their own tray: respawn it in active sessions
+                if (DateTime.Now - lastWatchdog >= TimeSpan.FromSeconds(15))
+                {
+                    lastWatchdog = DateTime.Now;
+                    try
+                    {
+                        var exe = Environment.ProcessPath;
+                        if (!string.IsNullOrEmpty(exe)) SessionGuard.EnsureTray(exe);
+                    }
+                    catch { }
+                }
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { Console.WriteLine("loop error: " + ex.Message); await Task.Delay(5000); }
@@ -134,6 +147,7 @@ internal static class Program
 
         var timer = new System.Windows.Forms.Timer { Interval = 15000 };
         Form? overlay = null;
+        var lockedNow = false; // Alt+F4 guard below: user close cancelled while locked
         timer.Tick += async (_, _) =>
         {
             try
@@ -141,6 +155,7 @@ internal static class Program
                 agent.TickDayRollover();
                 try { await agent.PollConfigAsync(CancellationToken.None); } catch { }
                 var d = PolicyEvaluator.Evaluate(agent.Policy, DateTime.Now, agent.ActiveMinToday);
+                lockedNow = d.State == State.Locked;
                 icon.Text = d.State switch
                 {
                     State.Locked => "tooMuch: LOCKED",
@@ -168,6 +183,7 @@ internal static class Program
                         Text = $"Computer locked\n{d.Message}\nAsk your parent.",
                     };
                     overlay.Controls.Add(label);
+                    overlay.FormClosing += (_, e) => { if (lockedNow) e.Cancel = true; };
                     overlay.Show();
                 }
                 else if (d.State != State.Locked && overlay is not null)
