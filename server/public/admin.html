@@ -67,11 +67,15 @@ a{color:#7db8ff}
 .action-help{flex:1 1 260px}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .modal-overlay[hidden]{display:none}
-.modal{background:#1c1c1c;border:1px solid #444;border-radius:12px;padding:28px 32px;max-width:560px;width:100%;max-height:90dvh;overflow:auto}
+.modal{background:#1c1c1c;border:1px solid #444;border-radius:12px;padding:28px 32px;max-width:760px;width:100%;max-height:90dvh;overflow:auto}
 .modal h2{margin-top:0}
 .modal ol{padding-left:24px;font-size:14px;line-height:1.55}
 .modal li+li{margin-top:8px}
 .modal code{background:#242424;padding:3px 8px;overflow-wrap:anywhere}
+.command-row{display:flex;align-items:center;gap:8px;margin:5px 0;min-width:0}
+.command-row code{flex:1;min-width:0;white-space:pre-wrap}
+.copy-button{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:34px;min-height:34px;padding:0;flex:none}
+.copy-button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 @media(max-width:640px){
   body{margin:0 auto;padding:10px}
   .card{padding:12px;margin:8px 0}
@@ -121,9 +125,15 @@ a{color:#7db8ff}
     <ol>
       <li>Download the zip on the child PC.</li>
       <li>Unzip it and open PowerShell as administrator in the extracted folder.</li>
-      <li>Enable locally created scripts for your account: run <code>Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</code> and enter <code>Y</code> if prompted.</li>
-      <li>If PowerShell says the installer is not digitally signed, run <code>Unblock-File .\install.ps1</code> (only for a ZIP from a source you trust).</li>
-      <li>Run the installer:<br><code id="installer-cmd">.\install.ps1 -ServerUrl …</code></li>
+      <li>Enable locally created scripts for your account: run
+        <div class="command-row"><code data-copy-source>Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned</code><button type="button" class="copy-button" data-act="copy-command" aria-label="Copy command" title="Copy command"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/></svg></button></div>
+        and enter <code>Y</code> if prompted.</li>
+      <li>If PowerShell says the installer is not digitally signed, run
+        <div class="command-row"><code data-copy-source>Unblock-File .\install.ps1</code><button type="button" class="copy-button" data-act="copy-command" aria-label="Copy command" title="Copy command"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/></svg></button></div>
+        (only for a ZIP from a source you trust).</li>
+      <li>Run the installer:
+        <div class="command-row"><code id="installer-cmd" data-copy-source> .\install.ps1 -ServerUrl …</code><button type="button" class="copy-button" data-act="copy-command" aria-label="Copy command" title="Copy command"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/></svg></button></div>
+      </li>
       <li>The PC auto-registers here with the 1440m default — then set its limits in its tab.</li>
     </ol>
     <div class="row">

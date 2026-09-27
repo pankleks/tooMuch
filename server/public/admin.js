@@ -8,11 +8,15 @@ const ICONS = {
   unlock: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
   message: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>',
   edit: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>',
+  save: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>',
+  copy: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v1"/></svg>',
+  check: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>',
   trash: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
 };
 let devices = [];
 const drafts = new Map();
 const detailPanels = new Map();
+let renderedDeviceId = null;
 let refreshSequence = 0;
 let forceDetailRefresh = false;
 let dailyBonusRefocus = null;
@@ -64,6 +68,25 @@ function messageSummary(message) {
   return `${messageSentAt(message.created_at)} — ${message.text} — ${messageStatusLabel(message.status)}`;
 }
 
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch { /* try the legacy fallback below */ }
+  }
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.left = "-10000px";
+  document.body.appendChild(field);
+  field.select();
+  const copied = document.execCommand("copy");
+  field.remove();
+  if (!copied) throw new Error("Clipboard copy failed");
+}
+
 function selectedId() {
   const h = (location.hash||"").replace(/^#/,"");
   if (h && devices.some(d=>d.device_id===h)) return h;
@@ -96,8 +119,11 @@ function renderTabs() {
 
 function renderDetail() {
   const list = document.getElementById("list");
-  list.innerHTML = "";
   const d = devices.find(x=>x.device_id===selectedId());
+  const nextDeviceId = d?.device_id ?? null;
+  if (renderedDeviceId && renderedDeviceId !== nextDeviceId) drafts.delete(renderedDeviceId);
+  renderedDeviceId = nextDeviceId;
+  list.innerHTML = "";
   if (!d) { list.innerHTML = `<p class="muted">No devices yet. Install the client on a PC – it will auto-register here.</p>`; return; }
   list.appendChild(buildCard(d));
 }
@@ -177,7 +203,7 @@ function buildCard(d) {
     }).join("")}
     </tbody></table>
     <div class="row">
-      <button data-act="save">Save days</button>
+      <button type="button" class="icon-button" data-act="save" aria-label="Save days" title="Save days">${ICONS.save}</button>
       <span class="muted action-help">Windows override the limit. Use 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
     </div>
     </section>`;
@@ -189,7 +215,23 @@ function buildCard(d) {
   }
   detailPanels.set(d.device_id, activePanel);
   const detailTablist = card.querySelector(".detail-tabs");
+  let currentPanel = activePanel;
+  const discardConfigDraft = () => {
+    drafts.delete(d.device_id);
+    for (let n = 1; n <= 7; n++) {
+      const day = d.config.days[String(n)];
+      const limit = card.querySelector(`input[data-day="${n}"][data-f="limit"]`);
+      const windows = card.querySelector(`input[data-day="${n}"][data-f="windows"]`);
+      const hasWindows = Boolean(day.windows?.length);
+      limit.value = String(day.limit_min);
+      windows.value = (day.windows || []).map(w => `${w.from}-${w.to}`).join(", ");
+      limit.disabled = hasWindows;
+      card.querySelector(`.mode-value[data-day="${n}"]`).textContent = hasWindows ? "WINDOW" : "LIMIT";
+    }
+  };
   const setPanel = panel => {
+    if (currentPanel === "config" && panel !== "config") discardConfigDraft();
+    currentPanel = panel;
     detailPanels.set(d.device_id, panel);
     for (const tab of detailTablist.querySelectorAll("[role=tab]")) {
       const selected = tab.dataset.panel === panel;
@@ -343,6 +385,27 @@ function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&
 window.addEventListener("hashchange", ()=>{ renderTabs(); renderDetail(); });
 // installer command uses this server's actual origin, not a hardcoded hostname
 document.getElementById("installer-cmd").textContent = `.\\install.ps1 -ServerUrl ${location.origin}`;
+document.querySelectorAll('[data-act="copy-command"]').forEach(button => {
+  button.innerHTML = ICONS.copy;
+  button.onclick = async () => {
+    const command = button.closest(".command-row")?.querySelector("[data-copy-source]")?.textContent?.trim();
+    if (!command) return;
+    try {
+      await copyTextToClipboard(command);
+      button.innerHTML = ICONS.check;
+      button.title = "Copied";
+      button.setAttribute("aria-label", "Copied to clipboard");
+      setTimeout(() => {
+        if (!button.isConnected) return;
+        button.innerHTML = ICONS.copy;
+        button.title = "Copy command";
+        button.setAttribute("aria-label", "Copy command");
+      }, 1500);
+    } catch {
+      alert("Could not copy command. Please copy it manually.");
+    }
+  };
+});
 const modal = document.getElementById("installer-modal");
 document.getElementById("open-installer").onclick = ()=>{ modal.hidden = false; loadVersion(); };
 document.getElementById("close-installer").onclick = ()=>{ modal.hidden = true; };

@@ -35,6 +35,9 @@ describe("api", () => {
     expect(page.body).toMatch(/id="refresh"[^>]*>[\s\S]*?<\/button>\s*<button id="open-installer"/);
     expect(page.body).toContain('id="open-installer" type="button" class="icon-button" aria-label="Client Installer" title="Client Installer"');
     expect(page.body).not.toContain('<button id="open-installer">Client Installer</button>');
+    expect(page.body).toContain("max-width:760px");
+    expect(page.body.match(/data-act="copy-command"/g)).toHaveLength(3);
+    expect(page.body).toContain('id="installer-cmd" data-copy-source');
     expect(page.body).not.toContain('aria-label="Device status legend"');
     expect(page.body).toContain(".tabs{flex-wrap:wrap;overflow:visible");
     expect(page.body).toContain('.action-row [data-act="rename"]{margin-left:auto}');
@@ -51,6 +54,13 @@ describe("api", () => {
     expect(adminScript.body).not.toContain("class=\"badge lock\"");
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
+    expect(adminScript.body).toContain('data-act="save" aria-label="Save days" title="Save days"');
+    expect(adminScript.body).not.toContain('data-act="save">Save days</button>');
+    expect(adminScript.body).toContain('if (currentPanel === "config" && panel !== "config") discardConfigDraft()');
+    expect(adminScript.body).toContain('if (renderedDeviceId && renderedDeviceId !== nextDeviceId) drafts.delete(renderedDeviceId)');
+    expect(adminScript.body).toContain('drafts.delete(d.device_id)');
+    expect(adminScript.body).toContain("async function copyTextToClipboard(text)");
+    expect(adminScript.body).toContain('button.setAttribute("aria-label", "Copied to clipboard")');
     expect(adminScript.body).toContain("function messageSentAt(value)");
     expect(adminScript.body).not.toContain("devices: ${devices.length}");
     expect(adminScript.body).toContain('recentMessageElement.title = recentMessages.map');

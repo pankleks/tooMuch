@@ -33,7 +33,9 @@ internal sealed class StatusTrayContext : ApplicationContext
 
     private void ShowWindow()
     {
+        window.CenterInWorkingArea(Screen.FromPoint(Cursor.Position).WorkingArea);
         window.Show();
+        window.CenterInWorkingArea(Screen.FromPoint(Cursor.Position).WorkingArea);
         window.Activate();
     }
 
@@ -88,7 +90,7 @@ internal sealed class StatusWindow : Form
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
-        StartPosition = FormStartPosition.CenterScreen;
+        StartPosition = FormStartPosition.Manual;
         ClientSize = new Size(340, 190);
         BackColor = Color.FromArgb(28, 28, 28);
         ForeColor = Color.White;
@@ -99,10 +101,29 @@ internal sealed class StatusWindow : Form
         remaining.Font = new Font("Segoe UI", 22, FontStyle.Bold);
         used.SetBounds(20, 96, 300, 22);
         detail.SetBounds(20, 121, 300, 22);
-        updated.SetBounds(20, 155, 300, 18);
+        updated.SetBounds(20, 150, 300, 18);
         updated.ForeColor = Color.Silver;
         updated.Font = new Font("Segoe UI", 8);
         Controls.AddRange(new Control[] { state, remaining, used, detail, updated });
+    }
+
+    public void CenterInWorkingArea(Rectangle workingArea)
+    {
+        var centered = new Rectangle(
+            workingArea.Left + (workingArea.Width - Width) / 2,
+            workingArea.Top + (workingArea.Height - Height) / 2,
+            Width,
+            Height);
+        Bounds = ClampToWorkingArea(centered, workingArea);
+    }
+
+    internal static Rectangle ClampToWorkingArea(Rectangle bounds, Rectangle workingArea)
+    {
+        var maxX = Math.Max(workingArea.Left, workingArea.Right - bounds.Width);
+        var maxY = Math.Max(workingArea.Top, workingArea.Bottom - bounds.Height);
+        var x = Math.Clamp(bounds.X, workingArea.Left, maxX);
+        var y = Math.Clamp(bounds.Y, workingArea.Top, maxY);
+        return new Rectangle(x, y, bounds.Width, bounds.Height);
     }
 
     public void UpdateStatus(ChildStatus status)
