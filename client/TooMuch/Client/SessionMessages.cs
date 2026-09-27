@@ -9,8 +9,8 @@ internal sealed class SessionMessages
 {
     private readonly AgentConfig config;
     private readonly Action<Exception> log;
-    private Task messages = Task.CompletedTask;
-    private Task warning = Task.CompletedTask;
+    // Shared by warnings and parent messages: never display overlapping dialogs.
+    private Task presentation = Task.CompletedTask;
     private DateTime nextPoll;
     private readonly HashSet<string> warned;
     private readonly HashSet<string> confirmed;
@@ -40,15 +40,15 @@ internal sealed class SessionMessages
 
     public void Tick(Agent agent, IReadOnlyList<int> sessions, CancellationToken ct)
     {
-        if (sessions.Count == 0) return;
+        if (sessions.Count == 0 || !presentation.IsCompleted) return;
         var alert = TimeWarning.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveSeconds);
-        if (alert != null && warning.IsCompleted && !warned.Contains(alert.Key))
+        if (alert != null && !warned.Contains(alert.Key))
         {
             var session = sessions[0];
-            warning = Task.Run(() => {
+            presentation = Task.Run(() => {
                 try
                 {
-                    if (ct.IsCancellationRequested || !SessionGuard.UnlockedSessions(config.ChildSid).Contains(session)) return;
+                    if (ct.IsCancellationRequested || !SessionGuard.UnlockedSessions(config.ChildSid, log).Contains(session)) return;
                     var unit = alert.Minutes == 1 ? "minute" : "minutes";
                     SessionGuard.ShowMessage(session, "Time remaining",
                         $"You have {alert.Minutes} {unit} remaining.\nYour session will be disconnected when your time expires. Save your work.", 60);
@@ -58,11 +58,12 @@ internal sealed class SessionMessages
                 }
                 catch (Exception ex) { log(ex); }
             });
+            return;
         }
-        if (messages.IsCompleted && DateTime.UtcNow >= nextPoll)
+        if (DateTime.UtcNow >= nextPoll)
         {
             nextPoll = DateTime.UtcNow.AddSeconds(10);
-            messages = Task.Run(() => Receive(ct));
+            presentation = Task.Run(() => Receive(ct));
         }
     }
 
@@ -88,12 +89,12 @@ internal sealed class SessionMessages
                 if (ct.IsCancellationRequested) return;
                 if (confirmed.Contains(message.Id)) { await Ack("confirmed"); continue; }
                 if (attempted.Contains(message.Id)) continue;
-                var sessions = SessionGuard.UnlockedSessions(config.ChildSid);
+                var sessions = SessionGuard.UnlockedSessions(config.ChildSid, log);
                 var remaining = (message.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds;
                 if (sessions.Count == 0 || remaining < 1) return;
                 await Ack("delivered");
                 // Recheck after HTTP: the child may have locked or left the session.
-                if (!SessionGuard.UnlockedSessions(config.ChildSid).Contains(sessions[0])) return;
+                if (!SessionGuard.UnlockedSessions(config.ChildSid, log).Contains(sessions[0])) return;
                 remaining = (message.ExpiresAt - DateTimeOffset.UtcNow).TotalSeconds;
                 if (remaining < 1) continue;
                 var ok = SessionGuard.ShowMessage(sessions[0], "Message from parent", message.Text,

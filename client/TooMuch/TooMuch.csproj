@@ -10,13 +10,14 @@
     <AssemblyName>TooMuch</AssemblyName>
     <ApplicationIcon>..\..\assets\toomuch.ico</ApplicationIcon>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.5.3</Version>
+    <Version>0.5.4</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="TooMuch.Tests" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
   </ItemGroup>
 </Project>

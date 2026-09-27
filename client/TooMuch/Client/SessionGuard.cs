@@ -81,40 +81,73 @@ internal static class SessionGuard
         public uint ProcessId, ThreadId;
     }
 
-    public static List<int> UnlockedSessions(string childSid)
+    public static List<int> UnlockedSessions(string childSid, Action<Exception>? log = null) =>
+        ScanSessions(childSid, log ?? (_ => { })).Unlocked;
+
+    internal sealed record SessionScan(List<int> ActiveChild, List<int> Unlocked);
+
+    public static SessionScan ScanSessions(string childSid, Action<Exception> log)
     {
         if (!Enumerate(IntPtr.Zero, 0, 1, out var buffer, out var count))
             throw new Win32Exception(Marshal.GetLastWin32Error());
-        var result = new List<int>();
+        var active = new List<int>();
         try
         {
             for (int i = 0; i < count; i++)
             {
                 var session = Marshal.PtrToStructure<Session>(buffer + i * Marshal.SizeOf<Session>());
                 if (session.Id == 0 || session.State != 0) continue;
-                if (!WTSQueryUserToken((uint)session.Id, out var token))
-                    throw new Win32Exception(Marshal.GetLastWin32Error());
-                try
-                {
-                    using var identity = new WindowsIdentity(token);
-                    if (identity.User?.Value != childSid) continue;
-                }
-                finally { CloseHandle(token); }
-                // WTSSessionInfoEx: Windows 10/11 flags 0=locked, 1=unlocked.
-                if (!Query(IntPtr.Zero, session.Id, 25, out var info, out var size))
-                    throw new Win32Exception(Marshal.GetLastWin32Error());
-                try
-                {
-                    if (size < Marshal.SizeOf<Info>()) throw new InvalidOperationException("Incomplete WTS session information.");
-                    var value = Marshal.PtrToStructure<Info>(info);
-                    if (value.Level != 1) throw new InvalidOperationException("Unsupported WTS information level.");
-                    if (value.Data.Flags == 1) result.Add(session.Id);
-                }
-                finally { WTSFreeMemory(info); }
+                active.Add(session.Id);
             }
         }
         finally { WTSFreeMemory(buffer); }
-        return result;
+        return ScanSessions(active, id => IsChild(id, childSid), IsUnlocked, log);
+    }
+
+    internal static SessionScan ScanSessions(IEnumerable<int> active, Func<int, bool> isChild,
+        Func<int, bool> isUnlocked, Action<Exception> log)
+    {
+        var activeChild = new List<int>();
+        var unlocked = new List<int>();
+        foreach (var id in active)
+        {
+            try
+            {
+                if (!isChild(id)) continue;
+                // Retain verified child sessions even when their lock state is unknown.
+                activeChild.Add(id);
+                if (isUnlocked(id)) unlocked.Add(id);
+            }
+            catch (Exception ex) { log(ex); }
+        }
+        return new SessionScan(activeChild, unlocked);
+    }
+
+    private static bool IsChild(int id, string childSid)
+    {
+        if (!WTSQueryUserToken((uint)id, out var token))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        try
+        {
+            using var identity = new WindowsIdentity(token);
+            return identity.User?.Value == childSid;
+        }
+        finally { CloseHandle(token); }
+    }
+
+    private static bool IsUnlocked(int id)
+    {
+        // WTSSessionInfoEx: Windows 10/11 flags 0=locked, 1=unlocked.
+        if (!Query(IntPtr.Zero, id, 25, out var info, out var size))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        try
+        {
+            if (size < Marshal.SizeOf<Info>()) throw new InvalidOperationException("Incomplete WTS session information.");
+            var value = Marshal.PtrToStructure<Info>(info);
+            if (value.Level != 1) throw new InvalidOperationException("Unsupported WTS information level.");
+            return value.Data.Flags == 1;
+        }
+        finally { WTSFreeMemory(info); }
     }
 
     public static void Disconnect(int id)

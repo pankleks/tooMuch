@@ -23,6 +23,7 @@ public sealed class Agent : IDisposable
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
     private readonly AgentConfig _cfg;
     private readonly Func<DateTime> utcNow;
+    private readonly Action<Exception>? logPersistenceError;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     public Policy Policy { get; private set; } = new();
@@ -33,10 +34,11 @@ public sealed class Agent : IDisposable
         TimeZoneInfo.FindSystemTimeZoneById(Policy.TimeZone));
     public string TodayKey { get; private set; } = "";
 
-    public Agent(AgentConfig cfg, Func<DateTime>? utcNow = null)
+    public Agent(AgentConfig cfg, Func<DateTime>? utcNow = null, Action<Exception>? logPersistenceError = null)
     {
         _cfg = cfg;
         this.utcNow = utcNow ?? (() => DateTime.UtcNow);
+        this.logPersistenceError = logPersistenceError;
         Directory.CreateDirectory(_cfg.DataDir);
         LoadCache();
     }
@@ -70,9 +72,18 @@ public sealed class Agent : IDisposable
 
     private void SaveUsage()
     {
-        var tmp = UsagePath(TodayKey) + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(new { active_min = ActiveMinToday, active_seconds = ActiveSeconds }));
-        File.Move(tmp, UsagePath(TodayKey), overwrite: true);
+        try
+        {
+            var tmp = UsagePath(TodayKey) + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(new { active_min = ActiveMinToday, active_seconds = ActiveSeconds }));
+            File.Move(tmp, UsagePath(TodayKey), overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Accounting and day rollover must proceed even when storage is unavailable.
+            // A later successful write persists the cumulative in-memory total.
+            logPersistenceError?.Invoke(ex);
+        }
     }
 
     public void TickDayRollover()

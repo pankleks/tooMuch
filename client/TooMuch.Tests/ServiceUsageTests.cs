@@ -1,10 +1,71 @@
 using TooMuch.Client;
+using TooMuch.Core;
 using Xunit;
 
 namespace TooMuch.Tests;
 
 public class ServiceUsageTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FailedUsageWritesDoNotPreventLimitEnforcementOrRecovery(bool accessDenied)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "tm-service-" + Guid.NewGuid());
+        var now = new DateTime(2026, 9, 26, 12, 0, 0, DateTimeKind.Utc);
+        var cfg = new AgentConfig { DeviceId = "test", DataDir = dir };
+        var errors = new List<Exception>();
+        try
+        {
+            using var agent = new Agent(cfg, () => now, errors.Add);
+            agent.Policy.Days["6"] = new DayConfig { LimitMin = 1 };
+            var tmp = Path.Combine(dir, "usage-2026-09-26.json.tmp");
+            // A directory denies file writes; an exclusive handle produces an I/O error.
+            if (accessDenied) Directory.CreateDirectory(tmp);
+            using (var blocker = accessDenied ? null : File.Open(tmp, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+            {
+                agent.AddSeconds(30);
+                agent.AddSeconds(30);
+                Assert.Equal(60, agent.ActiveSeconds);
+                Assert.Equal(State.Locked, PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday).State);
+                Assert.Equal(2, errors.Count);
+                if (accessDenied) Assert.IsType<UnauthorizedAccessException>(errors[0]);
+                else Assert.IsType<IOException>(errors[0]);
+            }
+            if (accessDenied) Directory.Delete(tmp);
+            agent.AddSeconds(1);
+            using var restarted = new Agent(cfg, () => now);
+            Assert.Equal(61, restarted.ActiveSeconds);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void FailedMidnightWriteStillAdvancesDayAndEnforcesNewPolicy()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "tm-service-" + Guid.NewGuid());
+        var now = new DateTime(2026, 9, 26, 21, 59, 58, DateTimeKind.Utc);
+        var errors = new List<Exception>();
+        try
+        {
+            using var agent = new Agent(new AgentConfig { DeviceId = "test", DataDir = dir }, () => now, errors.Add);
+            agent.AddSeconds(60);
+            Directory.CreateDirectory(Path.Combine(dir, "usage-2026-09-26.json.tmp"));
+            agent.Policy.Days["7"] = new DayConfig { LimitMin = 0 };
+            now = now.AddSeconds(3);
+            agent.TickDayRollover();
+            Assert.Single(errors);
+            Assert.Equal("2026-09-27", agent.TodayKey);
+            Assert.Equal(0, agent.ActiveSeconds);
+            Assert.Equal(State.Locked, PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday).State);
+            agent.TickDayRollover();
+            Assert.Single(errors); // No endless retry of the previous day's failed write.
+            agent.AddSeconds(1);
+            Assert.True(File.Exists(Path.Combine(dir, "usage-2026-09-27.json")));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     [Fact]
     public void PartialMinuteSurvivesRestartAndMidnightUsesServerTimezone()
     {

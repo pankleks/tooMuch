@@ -47,7 +47,7 @@ internal sealed class AgentService : ServiceBase
     {
         try
         {
-            using var agent = new Agent(config);
+            using var agent = new Agent(config, logPersistenceError: Log);
             // Do not disconnect a freshly installed child session because the
             // empty in-memory policy evaluates fail-closed before first poll.
             // If the network is unavailable, Poll returns after timeout and
@@ -63,27 +63,36 @@ internal sealed class AgentService : ServiceBase
             var nextBeat = TimeSpan.Zero;
             while (!ct.IsCancellationRequested)
             {
+                // Enumeration failure is fatal: let SCM recovery restart the service
+                // instead of silently skipping enforcement forever. Per-session errors
+                // are isolated by ScanSessions; only verified child sessions are targeted.
+                var sessionScan = SessionGuard.ScanSessions(config.ChildSid, Log);
                 try
                 {
                     if (Interlocked.Exchange(ref resetClock, 0) != 0) clock.Reset();
                     var oldDay = agent.TodayKey;
                     agent.TickDayRollover();
                     if (oldDay != agent.TodayKey) clock.Reset();
-                    var sessions = SessionGuard.UnlockedSessions(config.ChildSid);
+                    var sessions = sessionScan.Unlocked;
                     var decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
                     var counting = sessions.Count > 0 && decision.State != State.Locked;
                     var seconds = clock.Sample(watch.Elapsed, counting);
                     if (seconds > 0)
                     {
-                        // Persistence errors must not bypass enforcement of the in-memory limit.
-                        try { agent.AddSeconds(seconds); } catch (IOException ex) { Log(ex); }
+                        agent.AddSeconds(seconds);
                     }
                     decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
                     // A tick can reach the limit; publish the post-tick state.
                     counting = sessions.Count > 0 && decision.State != State.Locked;
                     publishedStatus.Publish(ChildStatus.Create(agent.Policy, agent.LocalNow, agent.ActiveSeconds, DateTimeOffset.UtcNow));
                     if (decision.State == State.Locked)
-                        foreach (var session in sessions) SessionGuard.Disconnect(session);
+                    {
+                        foreach (var session in sessionScan.ActiveChild)
+                        {
+                            try { SessionGuard.Disconnect(session); }
+                            catch (Exception ex) { Log(ex); }
+                        }
+                    }
                     else messages.Tick(agent, sessions, ct);
 
                     // HTTP cannot delay session enforcement. Only one network operation at a time.
