@@ -29,6 +29,8 @@ describe("api", () => {
     expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
     expect(page.body).toContain('aria-label="Refresh devices"');
     expect(page.body).toContain(".tabs{flex-wrap:wrap;overflow:visible");
+    expect(page.body).toContain("#list>.card{border-top:0}");
+    expect(page.body).toContain(".tab.locked.active{border-color:#7db8ff;background:#482427}");
 
     const adminScript = await app.inject({ method: "GET", url: "/admin-static/admin.js" });
     expect(adminScript.statusCode).toBe(200);
@@ -37,6 +39,7 @@ describe("api", () => {
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
     expect(adminScript.body).toContain('aria-label="Delete device"');
+    expect(adminScript.body).toContain('(d.force_lock ? " locked" : "")');
     expect(adminScript.body).toContain('data-act="daily-bonus"');
 
     const manifest = await app.inject({ method: "GET", url: "/admin-static/manifest.webmanifest" });

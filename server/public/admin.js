@@ -69,7 +69,7 @@ function renderTabs() {
   const sel = selectedId();
   for (const d of devices) {
     const b = document.createElement("button");
-    b.className = "tab" + (d.device_id===sel ? " active" : "");
+    b.className = "tab" + (d.device_id===sel ? " active" : "") + (d.force_lock ? " locked" : "");
     const status = deviceStatus(d);
     b.innerHTML = `<span class="dot ${status.dot}"></span><strong>${esc(d.name)}</strong><span class="tmin">${esc(todaySummary(d))}</span>`;
     b.title = `${d.device_id} — ${status.label}${d.force_lock ? "\nParent lock is enabled" : ""}`;

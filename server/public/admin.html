@@ -41,6 +41,10 @@ a{color:#7db8ff}
 .tab{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;border:1px solid #444;background:#242424;color:#eee;cursor:pointer;font-size:14px;white-space:nowrap}
 .tab:hover{background:#2e2e2e}
 .tab.active{border-color:#7db8ff;background:#26334d}
+.tab.locked{border-color:#71383a;background:#482427}
+.tab.locked:hover{background:#542b2e}
+.tab.locked.active{border-color:#7db8ff;background:#482427}
+.tab.locked.active:hover{background:#542b2e}
 .tab .dot,.status-legend .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
 .dot.counting{background:#2a9d48}.dot.paused{background:#e79525}.dot.offline{background:#777}
 .status-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 12px}
@@ -55,6 +59,7 @@ a{color:#7db8ff}
 .detail-tab:hover{background:#242424;color:#eee}
 .detail-tab[aria-selected="true"]{border-bottom-color:#7db8ff;color:#fff;background:#242a36}
 .detail-panel[hidden]{display:none}
+#list>.card{border-top:0}
 .responsive-table .mobile-label{display:none}
 .action-row{align-items:center}
 .icon-button{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;min-width:48px;min-height:48px;padding:0}
