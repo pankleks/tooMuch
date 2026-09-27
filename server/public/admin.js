@@ -1,4 +1,4 @@
-import { formatMinutes, formatQuota, formatTimeAgo } from "./format.js";
+import { formatMinutes, formatQuota } from "./format.js";
 import { deviceStatus } from "./device-status.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
@@ -107,7 +107,6 @@ function buildCard(d) {
   const today = d.today;
   const card = document.createElement("div");
   card.className = "card";
-  const lockBadge = d.locked === true ? `<span class="badge lock">LOCK</span>` : `<span class="badge">${d.locked === false ? "OK" : "UNKNOWN"}</span>`;
   const activePanel = detailPanels.get(d.device_id) ?? "history";
   const lockLabel = d.force_lock ? "Unlock device" : "Lock device now";
   const todayMode = today?.mode ?? d.today_mode;
@@ -115,8 +114,6 @@ function buildCard(d) {
   const onWindowDay = todayMode === "window";
   const dailyBonusMin = Number(d.today_bonus_min) || 0;
   card.innerHTML = `
-    <div class="row"><strong>${esc(d.name)}</strong> <span class="muted">${esc(d.device_id)} v${d.version}</span> ${lockBadge}
-    <span class="muted">seen: ${esc(formatTimeAgo(d.last_seen))}</span></div>
     <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(todayQuota ?? "?"))} (${esc(todayMode ?? "?")}) ${esc(today ? pct(today.active_min, today.quota, today.mode) : "")}</span>
     <div class="bar" style="flex:1"><i style="width:${barWidth(today ?? {active_min:0, mode:todayMode, quota:todayQuota})}%"></i></div></div>
     <div class="row daily-bonus-row">
@@ -213,9 +210,25 @@ function buildCard(d) {
       } catch(e) { alert("Add time failed: " + e.message); }
     };
   });
-  card.querySelector('[data-act="lock"]').onclick = async ()=>{
-    await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({force_lock: !d.force_lock})});
-    refresh();
+  const lockButton = card.querySelector('[data-act="lock"]');
+  lockButton.onclick = async ()=>{
+    const currentDevice = devices.find(device => device.device_id === d.device_id) ?? d;
+    const forceLock = !currentDevice.force_lock;
+    lockButton.disabled = true;
+    try {
+      const updated = await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {
+        method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({force_lock: forceLock})
+      });
+      currentDevice.force_lock = updated.config.force_lock;
+      d.force_lock = updated.config.force_lock;
+      const label = d.force_lock ? "Unlock device" : "Lock device now";
+      lockButton.innerHTML = d.force_lock ? ICONS.unlock : ICONS.lock;
+      lockButton.setAttribute("aria-label", label);
+      lockButton.title = label;
+      renderTabs();
+      await refresh();
+    } catch(e) { alert("Lock update failed: " + e.message); }
+    finally { if (lockButton.isConnected) lockButton.disabled = false; }
   };
   card.querySelector('[data-act="message"]').onclick = async ()=>{
     const text = prompt(`Message to your child (up to 1000 characters; valid for ${formatMinutes(15)}):`);

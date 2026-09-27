@@ -36,10 +36,15 @@ describe("api", () => {
     expect(adminScript.statusCode).toBe(200);
     expect(adminScript.body).toContain("History");
     expect(adminScript.body).toContain("Config");
+    expect(adminScript.body).not.toContain("formatTimeAgo");
+    expect(adminScript.body).not.toContain("seen:");
+    expect(adminScript.body).not.toContain("class=\"badge lock\"");
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
     expect(adminScript.body).toContain('aria-label="Delete device"');
     expect(adminScript.body).toContain('(d.force_lock ? " locked" : "")');
+    expect(adminScript.body).toContain("currentDevice.force_lock = updated.config.force_lock");
+    expect(adminScript.body).toContain('lockButton.setAttribute("aria-label", label)');
     expect(adminScript.body).toContain('data-act="daily-bonus"');
 
     const manifest = await app.inject({ method: "GET", url: "/admin-static/manifest.webmanifest" });
@@ -153,6 +158,13 @@ describe("api", () => {
       payload: { force_lock: true },
     });
     expect(lock.statusCode).toBe(200);
+    expect(lock.json().config.force_lock).toBe(true);
+    const unlock = await app.inject({
+      method: "PUT", url: `/api/admin/devices/${device_id}`, headers: { ...auth, "content-type": "application/json" },
+      payload: { force_lock: false },
+    });
+    expect(unlock.statusCode).toBe(200);
+    expect(unlock.json().config.force_lock).toBe(false);
   });
 
   it("admin can cumulatively add daily-limit time for today without changing the recurring schedule", async () => {
