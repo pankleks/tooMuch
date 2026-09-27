@@ -32,6 +32,10 @@ describe("api", () => {
     expect(page.body).toContain("manifest.webmanifest");
     expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
     expect(page.body).toContain('aria-label="Refresh devices"');
+    expect(page.body).toMatch(/<span id="status"[^>]*><\/span>\s*<button id="refresh"/);
+    expect(page.body).toContain('.header-brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0}');
+    expect(page.body).toContain('.device-detail{border:0;border-radius:0;padding:0;margin:12px 0;background:transparent}');
+    expect(page.body).toContain('.action-row [data-act="daily-bonus"]{width:auto;min-width:68px;flex:0 0 auto;padding-inline:16px}');
     expect(page.body).toMatch(/id="refresh"[^>]*>[\s\S]*?<\/button>\s*<button id="open-installer"/);
     expect(page.body).toContain('id="open-installer" type="button" class="icon-button" aria-label="Client Installer" title="Client Installer"');
     expect(page.body).not.toContain('<button id="open-installer">Client Installer</button>');
@@ -59,6 +63,11 @@ describe("api", () => {
     expect(adminScript.body).toContain('if (currentPanel === "config" && panel !== "config") discardConfigDraft()');
     expect(adminScript.body).toContain('if (renderedDeviceId && renderedDeviceId !== nextDeviceId) drafts.delete(renderedDeviceId)');
     expect(adminScript.body).toContain('drafts.delete(d.device_id)');
+    expect(adminScript.body).toContain('class="row usage-row"');
+    expect(adminScript.body).toContain('card.className = "card device-detail"');
+    expect(adminScript.body).not.toContain('class="usage-label"');
+    expect(adminScript.body).toContain('title="Used today: ${formatMinutes(usedToday)}"');
+    expect(adminScript.body).toContain('title="${onWindowDay ? "Allowed today" : "Limit today"}: ${esc(formatQuota(todayQuota ?? "?"))}"');
     expect(adminScript.body).toContain("async function copyTextToClipboard(text)");
     expect(adminScript.body).toContain('button.setAttribute("aria-label", "Copied to clipboard")');
     expect(adminScript.body).toContain("function messageSentAt(value)");

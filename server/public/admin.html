@@ -17,6 +17,7 @@
 :root{color-scheme:dark}
 body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#e8e8e8;background:#121212}
 .card{border:1px solid #333;border-radius:10px;padding:16px 20px;margin:12px 0;background:#1c1c1c}
+.device-detail{border:0;border-radius:0;padding:0;margin:12px 0;background:transparent}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .card .row{margin:8px 0}
 .card .row:first-child{margin-top:0}
@@ -53,6 +54,11 @@ a{color:#7db8ff}
 .header-brand img{width:52px;height:52px;object-fit:contain;flex:none}
 .header-brand h1{margin:12px 0;flex:none}
 .header-brand .app-version{font-size:12px;white-space:nowrap}
+.usage-row{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:12px;align-items:center}
+.usage-summary{display:flex;align-items:baseline;min-width:0;white-space:nowrap}
+.usage-limit{justify-content:flex-end}
+.usage-limit strong{overflow-wrap:anywhere}
+.usage-row .bar{width:100%;min-width:0}
 .detail-tabs{display:flex;gap:8px;border-bottom:1px solid #3a3a3a;margin:18px 0 12px}
 .detail-tab{flex:0 0 auto;min-width:120px;border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:#aaa}
 .detail-tab:hover{background:#242424;color:#eee}
@@ -63,6 +69,7 @@ a{color:#7db8ff}
 .action-row [data-act="rename"]{margin-left:auto}
 .icon-button{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;min-width:48px;min-height:48px;padding:0}
 .action-row .icon-button{flex:0 0 48px}
+.action-row [data-act="daily-bonus"]{width:auto;min-width:68px;flex:0 0 auto;padding-inline:16px}
 .icon-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .action-help{flex:1 1 260px}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
@@ -79,6 +86,7 @@ a{color:#7db8ff}
 @media(max-width:640px){
   body{margin:0 auto;padding:10px}
   .card{padding:12px;margin:8px 0}
+  .device-detail{padding:0;margin:8px 0}
   .header{gap:8px}
   .header-brand{flex:1 1 100%}
   .header-brand img{width:44px;height:44px}
@@ -87,6 +95,8 @@ a{color:#7db8ff}
   .tab{flex:1 1 180px;min-width:0;max-width:100%;padding:8px 10px}
   .tab strong{flex:0 1 auto;min-width:0;max-width:45vw;overflow:hidden;text-overflow:ellipsis}
   .tab .tmin{white-space:nowrap}
+  .usage-row{grid-template-columns:minmax(0,1fr) minmax(32px,1.2fr) minmax(0,1fr);gap:8px}
+  .usage-summary{flex-wrap:wrap;white-space:normal;gap:4px}
   .detail-tabs{position:sticky;top:0;z-index:2;background:#1c1c1c;padding-top:4px}
   .detail-tab{flex:1;min-width:0}
   .action-row{align-items:stretch}
@@ -111,9 +121,9 @@ a{color:#7db8ff}
     <h1>tooMuch</h1>
     <span class="muted app-version" aria-label="Version">v__APP_VERSION__</span>
   </div>
+  <span id="status" class="muted" role="status" aria-live="polite"></span>
   <button id="refresh" type="button" class="icon-button" aria-label="Refresh devices" title="Refresh devices"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></button>
   <button id="open-installer" type="button" class="icon-button" aria-label="Client Installer" title="Client Installer"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></button>
-  <span id="status" class="muted" role="status" aria-live="polite"></span>
 </div>
 <div class="modal-overlay" id="installer-modal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="installer-title">

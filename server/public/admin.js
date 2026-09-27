@@ -42,13 +42,6 @@ async function loadVersion() {
   }
 }
 
-function pct(used, quotaStr, mode) {
-  if (mode !== "limit" || !quotaStr) return "";
-  const lim = parseInt(quotaStr);
-  if (!lim) return used > 0 ? "BLOCK" : "0%";
-  return Math.min(100, Math.round(used/lim*100)) + "%";
-}
-
 function todaySummary(d) {
   const t = d.today;
   if (!t) return "no data";
@@ -165,15 +158,20 @@ function buildCard(d) {
     .sort((a, b) => (Date.parse(b.message.created_at) || 0) - (Date.parse(a.message.created_at) || 0) || b.index - a.index)
     .slice(0, 5);
   const card = document.createElement("div");
-  card.className = "card";
+  card.className = "card device-detail";
   const activePanel = detailPanels.get(d.device_id) ?? "history";
   const lockLabel = d.force_lock ? "Unlock device" : "Lock device now";
   const todayMode = today?.mode ?? d.today_mode;
   const todayQuota = today?.quota ?? d.today_quota;
   const onWindowDay = todayMode === "window";
+  const usedToday = today?.active_min ?? 0;
+  const progressToday = today ?? {active_min:usedToday, mode:todayMode, quota:todayQuota};
   card.innerHTML = `
-    <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(todayQuota ?? "?"))} (${esc(todayMode ?? "?")}) ${esc(today ? pct(today.active_min, today.quota, today.mode) : "")}</span>
-    <div class="bar" style="flex:1"><i style="width:${barWidth(today ?? {active_min:0, mode:todayMode, quota:todayQuota})}%"></i></div></div>
+    <div class="row usage-row">
+      <span class="usage-summary" title="Used today: ${formatMinutes(usedToday)}" aria-label="Used today: ${formatMinutes(usedToday)}"><strong>${formatMinutes(usedToday)}</strong></span>
+      <div class="bar" aria-hidden="true"><i style="width:${barWidth(progressToday)}%"></i></div>
+      <span class="usage-summary usage-limit" title="${onWindowDay ? "Allowed today" : "Limit today"}: ${esc(formatQuota(todayQuota ?? "?"))}" aria-label="${onWindowDay ? "Allowed today" : "Limit today"}: ${esc(formatQuota(todayQuota ?? "?"))}"><strong>${esc(formatQuota(todayQuota ?? "?"))}</strong></span>
+    </div>
     <div class="row action-row">
       <button type="button" class="icon-button" data-act="lock" aria-label="${lockLabel}" title="${lockLabel}">${d.force_lock?ICONS.unlock:ICONS.lock}</button>
       <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
