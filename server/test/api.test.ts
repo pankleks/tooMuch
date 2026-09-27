@@ -49,6 +49,8 @@ describe("api", () => {
     expect(adminScript.body).toContain("function messageSentAt(value)");
     expect(adminScript.body).toContain('recentMessageElement.title = recentMessages.map');
     expect(adminScript.body).toContain('Client version: ${d.client_version ? `v${d.client_version}` : "not reported"}');
+    expect(adminScript.body).toContain('await refresh(true, document.activeElement === button');
+    expect(adminScript.body).toContain('if (forceDetailRefresh || !document.querySelector("#list :focus"))');
     expect(adminScript.body).toContain('aria-label="Delete device"');
     expect(adminScript.body).toContain('(d.force_lock ? " locked" : "")');
     expect(adminScript.body).toContain("currentDevice.force_lock = updated.config.force_lock");

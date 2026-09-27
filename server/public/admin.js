@@ -13,6 +13,8 @@ let devices = [];
 const drafts = new Map();
 const detailPanels = new Map();
 let refreshSequence = 0;
+let forceDetailRefresh = false;
+let dailyBonusRefocus = null;
 
 async function api(path, opts={}) {
   const r = await fetch(path, opts);
@@ -99,7 +101,11 @@ function renderDetail() {
   list.appendChild(buildCard(d));
 }
 
-async function refresh() {
+async function refresh(forceDetail = false, refocusDailyBonus = null) {
+  if (forceDetail) {
+    forceDetailRefresh = true;
+    dailyBonusRefocus = refocusDailyBonus;
+  }
   const sequence = ++refreshSequence;
   const st = document.getElementById("status");
   st.textContent = "loading…";
@@ -109,7 +115,17 @@ async function refresh() {
     devices = ov.devices || [];
     st.textContent = `devices: ${devices.length}`;
     renderTabs();
-    if (!document.querySelector("#list :focus")) renderDetail();
+    if (forceDetailRefresh || !document.querySelector("#list :focus")) {
+      renderDetail();
+      if (forceDetailRefresh) {
+        forceDetailRefresh = false;
+        const target = dailyBonusRefocus;
+        dailyBonusRefocus = null;
+        if (target && selectedId() === target.deviceId) {
+          document.querySelector(`[data-act="daily-bonus"][data-minutes="${target.minutes}"]`)?.focus();
+        }
+      }
+    }
   } catch(e){
     st.textContent = navigator.onLine ? "server unavailable: " + e.message : "offline — reconnect to the tooMuch server";
     if (!devices.length) document.getElementById("list").innerHTML = `<p class="muted">The admin panel is available offline, but device data and changes require a connection to the server.</p>`;
@@ -228,7 +244,9 @@ function buildCard(d) {
         await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}/daily-bonus`, {
           method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({minutes:Number(button.dataset.minutes)})
         });
-        await refresh();
+        await refresh(true, document.activeElement === button
+          ? {deviceId: d.device_id, minutes: button.dataset.minutes}
+          : null);
       } catch(e) { alert("Add time failed: " + e.message); }
     };
   });
