@@ -84,6 +84,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const publicDir = path.join(here, "..", "public");
+  const packageInfo = JSON.parse(await fs.readFile(path.join(here, "..", "package.json"), "utf-8")) as { version: string };
   await app.register(fastifyStatic, { root: publicDir, prefix: "/admin-static/" });
 
   app.get("/health", async () => ({ ok: true }));
@@ -325,7 +326,8 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // serve admin page at /admin
   app.get("/admin", async (_req, reply) => {
-    return reply.sendFile("admin.html", publicDir);
+    const html = await fs.readFile(path.join(publicDir, "admin.html"), "utf-8");
+    return reply.type("text/html; charset=utf-8").send(html.replace("__APP_VERSION__", packageInfo.version));
   });
 
   // Service workers must be same-origin and need root scope to control /admin.

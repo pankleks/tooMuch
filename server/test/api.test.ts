@@ -25,6 +25,10 @@ describe("api", () => {
     const page = await app.inject({ method: "GET", url: "/admin" });
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain("id=\"list\"");
+    expect(page.body).toContain("<h1>tooMuch</h1>");
+    expect(page.body).toMatch(/class="muted app-version"[^>]*>v\d+\.\d+\.\d+</);
+    expect(page.body).not.toContain("parent panel");
+    expect(page.body).not.toContain("id=\"install-app\"");
     expect(page.body).toContain("manifest.webmanifest");
     expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
     expect(page.body).toContain('aria-label="Refresh devices"');
@@ -36,6 +40,7 @@ describe("api", () => {
     expect(adminScript.statusCode).toBe(200);
     expect(adminScript.body).toContain("History");
     expect(adminScript.body).toContain("Config");
+    expect(adminScript.body).not.toContain("beforeinstallprompt");
     expect(adminScript.body).not.toContain("formatTimeAgo");
     expect(adminScript.body).not.toContain("seen:");
     expect(adminScript.body).not.toContain("class=\"badge lock\"");

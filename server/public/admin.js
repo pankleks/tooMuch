@@ -295,36 +295,6 @@ document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") modal.hidden
 document.getElementById("refresh").onclick = refresh;
 document.getElementById("dl").onclick = ()=>{ window.location.href="/api/admin/client-download"; };
 
-const installButton = document.getElementById("install-app");
-let installPrompt = null;
-const secureContext = window.isSecureContext;
-const isStandalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent)
-  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-if (!secureContext || (isAppleMobile && !isStandalone)) installButton.hidden = false;
-
-window.addEventListener("beforeinstallprompt", event => {
-  event.preventDefault();
-  installPrompt = event;
-  installButton.hidden = false;
-});
-installButton.addEventListener("click", async () => {
-  if (!secureContext) {
-    alert("PWA installation requires HTTPS. Open this panel from a trusted HTTPS address first.");
-  } else if (installPrompt) {
-    installPrompt.prompt();
-    await installPrompt.userChoice;
-    installPrompt = null;
-    installButton.hidden = true;
-  } else if (isAppleMobile && !isStandalone) {
-    alert("To install tooMuch, tap Share in Safari and choose Add to Home Screen.");
-  }
-});
-window.addEventListener("appinstalled", () => {
-  installButton.hidden = true;
-  installPrompt = null;
-});
-
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/service-worker.js").catch(error => console.warn("PWA offline shell registration failed:", error));
 }

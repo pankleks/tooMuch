@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>tooMuch – admin</title>
+<title>tooMuch</title>
 <meta name="theme-color" content="#121212" />
 <meta name="description" content="Manage tooMuch device schedules, usage and parental controls." />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -53,7 +53,8 @@ a{color:#7db8ff}
 .header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .header-brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
 .header-brand img{width:52px;height:52px;object-fit:contain;flex:none}
-.header-brand h1{margin:12px 0;flex:1}
+.header-brand h1{margin:12px 0;flex:none}
+.header-brand .app-version{font-size:12px;white-space:nowrap}
 .detail-tabs{display:flex;gap:8px;border-bottom:1px solid #3a3a3a;margin:18px 0 12px}
 .detail-tab{flex:0 0 auto;min-width:120px;border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:#aaa}
 .detail-tab:hover{background:#242424;color:#eee}
@@ -105,9 +106,9 @@ a{color:#7db8ff}
 <div class="header">
   <div class="header-brand">
     <img src="/admin-static/icons/icon-192.png" alt="" aria-hidden="true" />
-    <h1>tooMuch – parent panel</h1>
+    <h1>tooMuch</h1>
+    <span class="muted app-version" aria-label="Version">v__APP_VERSION__</span>
   </div>
-  <button id="install-app" type="button" hidden>Install app</button>
   <button id="open-installer">Client Installer</button>
 </div>
 <div class="modal-overlay" id="installer-modal" hidden>
