@@ -45,10 +45,8 @@ a{color:#7db8ff}
 .tab.locked:hover{background:#542b2e}
 .tab.locked.active{border-color:#7db8ff;background:#482427}
 .tab.locked.active:hover{background:#542b2e}
-.tab .dot,.status-legend .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.tab .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
 .dot.counting{background:#2a9d48}.dot.paused{background:#e79525}.dot.offline{background:#777}
-.status-legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0 12px}
-.status-legend span{display:inline-flex;align-items:center;gap:6px}
 .tab .tmin{color:#999;font-size:12px}
 .header{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .header-brand{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
@@ -62,6 +60,7 @@ a{color:#7db8ff}
 .detail-panel[hidden]{display:none}
 .responsive-table .mobile-label{display:none}
 .action-row{align-items:center}
+.action-row [data-act="rename"]{margin-left:auto}
 .icon-button{display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;min-width:48px;min-height:48px;padding:0}
 .action-row .icon-button{flex:0 0 48px}
 .icon-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -84,7 +83,6 @@ a{color:#7db8ff}
   .tab{flex:1 1 180px;min-width:0;max-width:100%;padding:8px 10px}
   .tab strong{flex:0 1 auto;min-width:0;max-width:45vw;overflow:hidden;text-overflow:ellipsis}
   .tab .tmin{white-space:nowrap}
-  .status-legend{gap:8px 14px}
   .detail-tabs{position:sticky;top:0;z-index:2;background:#1c1c1c;padding-top:4px}
   .detail-tab{flex:1;min-width:0}
   .action-row{align-items:stretch}
@@ -109,7 +107,9 @@ a{color:#7db8ff}
     <h1>tooMuch</h1>
     <span class="muted app-version" aria-label="Version">v__APP_VERSION__</span>
   </div>
-  <button id="open-installer">Client Installer</button>
+  <button id="refresh" type="button" class="icon-button" aria-label="Refresh devices" title="Refresh devices"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></button>
+  <button id="open-installer" type="button" class="icon-button" aria-label="Client Installer" title="Client Installer"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg></button>
+  <span id="status" class="muted" role="status" aria-live="polite"></span>
 </div>
 <div class="modal-overlay" id="installer-modal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="installer-title">
@@ -133,16 +133,7 @@ a{color:#7db8ff}
 </div>
 
 <main class="card">
-  <div class="row">
-    <button id="refresh" type="button" class="icon-button" aria-label="Refresh devices" title="Refresh devices"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></button>
-    <span id="status" class="muted"></span>
-  </div>
   <div class="tabs" id="tabs"></div>
-  <div class="status-legend muted" aria-label="Device status legend">
-    <span><i class="dot counting"></i>Online, timer counting</span>
-    <span><i class="dot paused"></i>Online, timer paused</span>
-    <span><i class="dot offline"></i>Offline (no check-in for 5+ minutes)</span>
-  </div>
   <div id="list"></div>
 </main>
 

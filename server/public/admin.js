@@ -7,6 +7,7 @@ const ICONS = {
   lock: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
   unlock: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
   message: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>',
+  edit: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>',
   trash: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
 };
 let devices = [];
@@ -113,7 +114,7 @@ async function refresh(forceDetail = false, refocusDailyBonus = null) {
     const ov = await api("/api/admin/overview");
     if (sequence !== refreshSequence) return;
     devices = ov.devices || [];
-    st.textContent = `devices: ${devices.length}`;
+    st.textContent = "";
     renderTabs();
     if (forceDetailRefresh || !document.querySelector("#list :focus")) {
       renderDetail();
@@ -144,18 +145,14 @@ function buildCard(d) {
   const todayMode = today?.mode ?? d.today_mode;
   const todayQuota = today?.quota ?? d.today_quota;
   const onWindowDay = todayMode === "window";
-  const dailyBonusMin = Number(d.today_bonus_min) || 0;
   card.innerHTML = `
     <div class="row"><span>Today: <strong>${formatMinutes(today?today.active_min:0)}</strong> / ${esc(formatQuota(todayQuota ?? "?"))} (${esc(todayMode ?? "?")}) ${esc(today ? pct(today.active_min, today.quota, today.mode) : "")}</span>
     <div class="bar" style="flex:1"><i style="width:${barWidth(today ?? {active_min:0, mode:todayMode, quota:todayQuota})}%"></i></div></div>
-    <div class="row daily-bonus-row">
-      <span>Extra time today: <strong>${formatMinutes(dailyBonusMin)}</strong></span>
-      ${[15,30,60].map(minutes=>`<button type="button" data-act="daily-bonus" data-minutes="${minutes}" aria-label="Add ${formatMinutes(minutes)} to today's daily limit" title="Add ${formatMinutes(minutes)} to today's daily limit" ${onWindowDay?"disabled":""}>+${formatMinutes(minutes)}</button>`).join("")}
-      <span class="muted">${onWindowDay ? "Today's time windows are unchanged; extra time only applies to daily limits." : "Adds to today's daily limit only; resets at midnight."}</span>
-    </div>
     <div class="row action-row">
       <button type="button" class="icon-button" data-act="lock" aria-label="${lockLabel}" title="${lockLabel}">${d.force_lock?ICONS.unlock:ICONS.lock}</button>
       <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
+      <button type="button" class="icon-button" data-act="daily-bonus" data-minutes="15" aria-label="Add 15m to today's daily limit" title="Add 15m to today's daily limit" ${onWindowDay?"disabled":""}>+15m</button>
+      <button type="button" class="icon-button" data-act="rename" aria-label="Rename device" title="Rename device">${ICONS.edit}</button>
       <button type="button" class="icon-button danger" data-act="del" aria-label="Delete device" title="Delete device">${ICONS.trash}</button>
     </div>
     <div class="muted recent-messages"${recentMessages.length ? ' tabindex="0"' : ""}></div>
@@ -280,6 +277,25 @@ function buildCard(d) {
       });
       await refresh();
     } catch(e) { alert("Send failed: " + e.message); }
+  };
+  const renameButton = card.querySelector('[data-act="rename"]');
+  renameButton.onclick = async ()=>{
+    const name = prompt(`Rename device "${d.name}" (up to 80 characters):`, d.name);
+    if (name === null) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) { alert("Device name cannot be empty."); return; }
+    if (trimmedName.length > 80) { alert("Device name must be 80 characters or fewer."); return; }
+    renameButton.disabled = true;
+    try {
+      const updated = await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}/name`, {
+        method:"PUT", headers:{"content-type":"application/json"}, body:JSON.stringify({name:trimmedName})
+      });
+      const currentDevice = devices.find(device => device.device_id === d.device_id) ?? d;
+      currentDevice.name = updated.name;
+      d.name = updated.name;
+      renderTabs();
+    } catch(e) { alert("Rename failed: " + e.message); }
+    finally { if (renameButton.isConnected) renameButton.disabled = false; }
   };
   card.querySelector('[data-act="del"]').onclick = async ()=>{
     if (!confirm(`Delete device "${d.name}" (${d.device_id})?\n\nThis removes its config, limits and history. The client on that PC will fail authentication until you reinstall it.`)) return;

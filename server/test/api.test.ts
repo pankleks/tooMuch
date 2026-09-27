@@ -32,7 +32,12 @@ describe("api", () => {
     expect(page.body).toContain("manifest.webmanifest");
     expect(page.body).toContain("src=\"/admin-static/icons/icon-192.png\"");
     expect(page.body).toContain('aria-label="Refresh devices"');
+    expect(page.body).toMatch(/id="refresh"[^>]*>[\s\S]*?<\/button>\s*<button id="open-installer"/);
+    expect(page.body).toContain('id="open-installer" type="button" class="icon-button" aria-label="Client Installer" title="Client Installer"');
+    expect(page.body).not.toContain('<button id="open-installer">Client Installer</button>');
+    expect(page.body).not.toContain('aria-label="Device status legend"');
     expect(page.body).toContain(".tabs{flex-wrap:wrap;overflow:visible");
+    expect(page.body).toContain('.action-row [data-act="rename"]{margin-left:auto}');
     expect(page.body).not.toContain("#list>.card{border-top:0}");
     expect(page.body).toContain(".tab.locked.active{border-color:#7db8ff;background:#482427}");
 
@@ -47,11 +52,19 @@ describe("api", () => {
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
     expect(adminScript.body).toContain("function messageSentAt(value)");
+    expect(adminScript.body).not.toContain("devices: ${devices.length}");
     expect(adminScript.body).toContain('recentMessageElement.title = recentMessages.map');
     expect(adminScript.body).toContain('Client version: ${d.client_version ? `v${d.client_version}` : "not reported"}');
     expect(adminScript.body).toContain('await refresh(true, document.activeElement === button');
     expect(adminScript.body).toContain('if (forceDetailRefresh || !document.querySelector("#list :focus"))');
     expect(adminScript.body).toContain('aria-label="Delete device"');
+    expect(adminScript.body).toContain('data-act="rename" aria-label="Rename device"');
+    expect(adminScript.body).toMatch(/data-act="message"[\s\S]*data-act="daily-bonus" data-minutes="15"[\s\S]*data-act="rename"/);
+    expect(adminScript.body).not.toContain("[15,30,60]");
+    expect(adminScript.body).not.toContain("data-minutes=\"${minutes}\"");
+    expect(adminScript.body).not.toContain("Extra time today:");
+    expect(adminScript.body).not.toContain("Adds to today's daily limit only");
+    expect(adminScript.body).toContain('/name`, {');
     expect(adminScript.body).toContain('(d.force_lock ? " locked" : "")');
     expect(adminScript.body).toContain("currentDevice.force_lock = updated.config.force_lock");
     expect(adminScript.body).toContain('lockButton.setAttribute("aria-label", label)');
@@ -179,6 +192,29 @@ describe("api", () => {
     });
     expect(unlock.statusCode).toBe(200);
     expect(unlock.json().config.force_lock).toBe(false);
+  });
+
+  it("admin can rename a device without changing its policy version", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "pc-rename" } });
+    const { device_id } = reg.json();
+    const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const url = `/api/admin/devices/${device_id}/name`;
+
+    const rename = await app.inject({ method: "PUT", url, headers: auth, payload: { name: "  Emma's PC  " } });
+    expect(rename.statusCode).toBe(200);
+    expect(rename.json()).toEqual({ ok: true, name: "Emma's PC" });
+
+    const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
+    const device = overview.json().devices[0];
+    expect(device.name).toBe("Emma's PC");
+    expect(device.config.version).toBe(1);
+
+    const empty = await app.inject({ method: "PUT", url, headers: auth, payload: { name: "   " } });
+    expect(empty.statusCode).toBe(400);
+    const tooLong = await app.inject({ method: "PUT", url, headers: auth, payload: { name: "x".repeat(81) } });
+    expect(tooLong.statusCode).toBe(400);
+    const unauthenticated = await app.inject({ method: "PUT", url, payload: { name: "New name" } });
+    expect(unauthenticated.statusCode).toBe(401);
   });
 
   it("admin can cumulatively add daily-limit time for today without changing the recurring schedule", async () => {

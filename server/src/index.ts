@@ -270,6 +270,31 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   );
 
+  // ---- admin: rename a device without changing its policy version ----
+  app.put<{ Params: { id: string }; Body: { name: string } }>(
+    "/api/admin/devices/:id/name",
+    {
+      onRequest: app.basicAuth,
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          additionalProperties: false,
+          properties: { name: { type: "string", minLength: 1, maxLength: 80 } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const device = await loadDevice(dataDir(), req.params.id);
+      if (!device) return reply.code(404).send({ error: "not found" });
+      const name = req.body.name.trim();
+      if (!name) return reply.code(400).send({ error: "name must not be empty" });
+      device.name = name;
+      await saveDevice(dataDir(), device);
+      return reply.send({ ok: true, name });
+    }
+  );
+
   // ---- admin: grant extra daily-limit time for today only ----
   app.post<{ Params: { id: string }; Body: { minutes: number } }>(
     "/api/admin/devices/:id/daily-bonus",
