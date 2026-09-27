@@ -16,6 +16,15 @@ export function formatQuota(value) {
   return match ? formatMinutes(Number(match[1])) : (quota || "?");
 }
 
+/** Minutes remaining for a daily limit, or null when no minute quota applies. */
+export function remainingMinutes(mode, quota, used) {
+  if (mode !== "limit") return null;
+  const match = /^(\d+)m$/.exec(String(quota ?? ""));
+  const usedMinutes = Number(used);
+  if (!match || !Number.isFinite(usedMinutes) || usedMinutes < 0) return null;
+  return Math.max(0, Math.floor(Number(match[1]) - usedMinutes));
+}
+
 /** Human-readable age for ISO timestamps from last_seen. */
 export function formatTimeAgo(value, now = Date.now()) {
   if (!value) return "never";

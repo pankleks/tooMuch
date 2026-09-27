@@ -64,6 +64,11 @@ describe("api", () => {
     expect(adminScript.body).toContain('if (renderedDeviceId && renderedDeviceId !== nextDeviceId) drafts.delete(renderedDeviceId)');
     expect(adminScript.body).toContain('drafts.delete(d.device_id)');
     expect(adminScript.body).toContain('class="row usage-row"');
+    expect(adminScript.body).toContain('class="bar" role="img" aria-label="${remainingAriaLabel}"');
+    expect(adminScript.body).toContain('class="bar-label" aria-hidden="true">${esc(remainingLabel)}');
+    expect(adminScript.body).toContain('const remainingToday = remainingMinutes(todayMode, todayQuota, usedToday)');
+    expect(adminScript.body).toContain('const remainingLabel = remainingToday === null ? "—" : formatMinutes(remainingToday)');
+    expect(adminScript.body).not.toContain('`${formatMinutes(remainingToday)} left`');
     expect(adminScript.body).toContain('card.className = "card device-detail"');
     expect(adminScript.body).not.toContain('class="usage-label"');
     expect(adminScript.body).toContain('title="Used today: ${formatMinutes(usedToday)}"');

@@ -24,8 +24,9 @@ body{font-family:system-ui,sans-serif;max-width:1100px;margin:24px auto;padding:
 table{border-collapse:collapse;width:100%;margin-top:14px}
 th,td{border:1px solid #333;padding:6px 8px;font-size:14px;text-align:left}
 th{background:#242424}
-.bar{height:10px;background:#333;border-radius:6px;overflow:hidden;min-width:120px}
-.bar>i{display:block;height:100%;background:#2a9d48}
+.bar{height:10px;position:relative;background:#333;border-radius:6px;overflow:hidden;min-width:120px}
+.bar>i{display:block;height:100%;background:#1f6b35}
+.bar-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;white-space:nowrap;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 2px #111;pointer-events:none}
 .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;background:#333;color:#eee}
 .badge.lock{background:#7a1f1f;color:#fff}
 input{background:#242424;color:#eee;border:1px solid #444;border-radius:6px;padding:7px 9px;min-height:40px}
@@ -58,7 +59,7 @@ a{color:#7db8ff}
 .usage-summary{display:flex;align-items:baseline;min-width:0;white-space:nowrap}
 .usage-limit{justify-content:flex-end}
 .usage-limit strong{overflow-wrap:anywhere}
-.usage-row .bar{width:100%;min-width:0}
+.usage-row .bar{height:24px;width:100%;min-width:0}
 .detail-tabs{display:flex;gap:8px;border-bottom:1px solid #3a3a3a;margin:18px 0 12px}
 .detail-tab{flex:0 0 auto;min-width:120px;border:0;border-bottom:3px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:#aaa}
 .detail-tab:hover{background:#242424;color:#eee}

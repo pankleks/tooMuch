@@ -1,4 +1,4 @@
-import { formatMinutes, formatQuota } from "./format.js";
+import { formatMinutes, formatQuota, remainingMinutes } from "./format.js";
 import { deviceStatus } from "./device-status.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
@@ -166,10 +166,15 @@ function buildCard(d) {
   const onWindowDay = todayMode === "window";
   const usedToday = today?.active_min ?? 0;
   const progressToday = today ?? {active_min:usedToday, mode:todayMode, quota:todayQuota};
+  const remainingToday = remainingMinutes(todayMode, todayQuota, usedToday);
+  const remainingLabel = remainingToday === null ? "—" : formatMinutes(remainingToday);
+  const remainingAriaLabel = onWindowDay
+    ? "Remaining time unavailable for window schedule"
+    : remainingToday === null ? "Remaining time unavailable" : `Remaining time: ${remainingLabel}`;
   card.innerHTML = `
     <div class="row usage-row">
       <span class="usage-summary" title="Used today: ${formatMinutes(usedToday)}" aria-label="Used today: ${formatMinutes(usedToday)}"><strong>${formatMinutes(usedToday)}</strong></span>
-      <div class="bar" aria-hidden="true"><i style="width:${barWidth(progressToday)}%"></i></div>
+      <div class="bar" role="img" aria-label="${remainingAriaLabel}"><i style="width:${barWidth(progressToday)}%"></i><span class="bar-label" aria-hidden="true">${esc(remainingLabel)}</span></div>
       <span class="usage-summary usage-limit" title="${onWindowDay ? "Allowed today" : "Limit today"}: ${esc(formatQuota(todayQuota ?? "?"))}" aria-label="${onWindowDay ? "Allowed today" : "Limit today"}: ${esc(formatQuota(todayQuota ?? "?"))}"><strong>${esc(formatQuota(todayQuota ?? "?"))}</strong></span>
     </div>
     <div class="row action-row">

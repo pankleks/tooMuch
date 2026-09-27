@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMinutes, formatQuota, formatTimeAgo } from "../public/format.js";
+import { formatMinutes, formatQuota, formatTimeAgo, remainingMinutes } from "../public/format.js";
 
 describe("admin duration formatting", () => {
   it.each([
@@ -14,6 +14,16 @@ describe("admin duration formatting", () => {
     expect(formatQuota("16:00-20:00")).toBe("16:00-20:00");
     expect(formatQuota(null)).toBe("?");
     expect(formatMinutes(-1)).toBe("?");
+  });
+
+  it.each([
+    ["limit", "1440m", 23, 1417],
+    ["limit", "30m", 30, 0],
+    ["limit", "15m", 20, 0],
+    ["window", "16:00-20:00", 23, null],
+    ["limit", "unknown", 0, null],
+  ])("calculates remaining daily-limit minutes for %s quota %s after %i used", (mode, quota, used, expected) => {
+    expect(remainingMinutes(mode, quota, used)).toBe(expected);
   });
 
   it("formats last-seen as a relative age", () => {
