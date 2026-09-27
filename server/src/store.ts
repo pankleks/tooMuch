@@ -148,7 +148,7 @@ export function weekdayOf(dateStr: string): string {
 export async function recordHeartbeat(
   dir: string,
   device: DeviceFile,
-  entry: { date: string; active_min: number; locked: boolean; counting?: boolean }
+  entry: { date: string; active_min: number; locked: boolean; counting?: boolean; client_version?: string }
 ): Promise<DeviceFile> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) throw Object.assign(new Error("bad date"), { statusCode: 400 });
   const wd = weekdayOf(entry.date);
@@ -162,6 +162,8 @@ export async function recordHeartbeat(
   // Older clients omit this field; clear stale status rather than retaining it.
   if (entry.counting === undefined) delete device.counting;
   else device.counting = entry.counting;
+  // Older clients omit this field; keep the most recently reported version.
+  if (entry.client_version !== undefined) device.client_version = entry.client_version;
   await saveDevice(dir, device);
   return device;
 }

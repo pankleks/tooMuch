@@ -46,6 +46,9 @@ describe("api", () => {
     expect(adminScript.body).not.toContain("class=\"badge lock\"");
     expect(adminScript.body).toContain('aria-label="${lockLabel}"');
     expect(adminScript.body).toContain('aria-label="Send message to child"');
+    expect(adminScript.body).toContain("function messageSentAt(value)");
+    expect(adminScript.body).toContain('recentMessageElement.title = recentMessages.map');
+    expect(adminScript.body).toContain('Client version: ${d.client_version ? `v${d.client_version}` : "not reported"}');
     expect(adminScript.body).toContain('aria-label="Delete device"');
     expect(adminScript.body).toContain('(d.force_lock ? " locked" : "")');
     expect(adminScript.body).toContain("currentDevice.force_lock = updated.config.force_lock");
@@ -97,7 +100,7 @@ describe("api", () => {
     const todayStr = localDate();
     const hb = await app.inject({
       method: "POST", url: "/api/heartbeat", headers: h,
-      payload: { device_id, date: todayStr, active_min: 45, locked: false, counting: true },
+      payload: { device_id, date: todayStr, active_min: 45, locked: false, counting: true, client_version: "0.5.6" },
     });
     expect(hb.statusCode).toBe(200);
 
@@ -110,6 +113,7 @@ describe("api", () => {
     const me = body.devices.find((d: { device_id: string }) => d.device_id === device_id);
     expect(me.today.active_min).toBe(45);
     expect(me.counting).toBe(true);
+    expect(me.client_version).toBe("0.5.6");
     expect(me.last7.length).toBe(7);
   });
 
@@ -118,18 +122,21 @@ describe("api", () => {
     const { device_id, token } = reg.json();
     const headers = { "x-device-token": token };
     const auth = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
-    const send = (counting?: boolean) => app.inject({
+    const send = (counting?: boolean, client_version?: string) => app.inject({
       method: "POST", url: "/api/heartbeat", headers,
-      payload: { device_id, date: localDate(), active_min: 1, locked: false, ...(counting === undefined ? {} : { counting }) },
+      payload: { device_id, date: localDate(), active_min: 1, locked: false,
+        ...(counting === undefined ? {} : { counting }), ...(client_version === undefined ? {} : { client_version }) },
     });
-    const overviewCounting = async () => (await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth })).json().devices[0].counting;
+    const overviewDevice = async () => (await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth })).json().devices[0];
 
-    expect((await send(true)).statusCode).toBe(200);
-    expect(await overviewCounting()).toBe(true);
+    expect((await send(true, "0.5.6")).statusCode).toBe(200);
+    expect((await overviewDevice()).counting).toBe(true);
     expect((await send(false)).statusCode).toBe(200);
-    expect(await overviewCounting()).toBe(false);
+    expect((await overviewDevice()).counting).toBe(false);
     expect((await send()).statusCode).toBe(200);
-    expect(await overviewCounting()).toBe(null);
+    const legacyHeartbeatDevice = await overviewDevice();
+    expect(legacyHeartbeatDevice.counting).toBe(null);
+    expect(legacyHeartbeatDevice.client_version).toBe("0.5.6");
   });
 
   it("admin can set per-day limits + windows override, validation enforced", async () => {
@@ -282,6 +289,7 @@ describe("api", () => {
     expect((await app.inject({ method: "GET", url: inbox, headers: child })).json().messages).toEqual([]);
     const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: admin });
     expect(overview.json().devices[0].messages[0].status).toBe("confirmed");
+    expect(overview.json().devices[0].messages[0].created_at).toBe(message.json().created_at);
     await app.inject({ method: "POST", url: send, headers: admin, payload: { text: "Expires", ttl_min: 1 } });
     const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 61000);
     try {

@@ -48,6 +48,19 @@ function todaySummary(d) {
   return `${formatMinutes(t.active_min)} / ${formatQuota(t.quota)}`;
 }
 
+function messageStatusLabel(status) {
+  return {pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[status] || status;
+}
+
+function messageSentAt(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown time" : new Intl.DateTimeFormat(undefined, {dateStyle:"short",timeStyle:"short"}).format(date);
+}
+
+function messageSummary(message) {
+  return `${messageSentAt(message.created_at)} — ${message.text} — ${messageStatusLabel(message.status)}`;
+}
+
 function selectedId() {
   const h = (location.hash||"").replace(/^#/,"");
   if (h && devices.some(d=>d.device_id===h)) return h;
@@ -72,7 +85,7 @@ function renderTabs() {
     b.className = "tab" + (d.device_id===sel ? " active" : "") + (d.force_lock ? " locked" : "");
     const status = deviceStatus(d);
     b.innerHTML = `<span class="dot ${status.dot}"></span><strong>${esc(d.name)}</strong><span class="tmin">${esc(todaySummary(d))}</span>`;
-    b.title = `${d.device_id} — ${status.label}${d.force_lock ? "\nParent lock is enabled" : ""}`;
+    b.title = `${d.device_id} — ${status.label}\nClient version: ${d.client_version ? `v${d.client_version}` : "not reported"}${d.force_lock ? "\nParent lock is enabled" : ""}`;
     b.onclick = ()=>select(d.device_id);
     tabs.appendChild(b);
   }
@@ -105,6 +118,9 @@ async function refresh() {
 
 function buildCard(d) {
   const today = d.today;
+  const recentMessages = (d.messages || []).map((message, index) => ({message, index}))
+    .sort((a, b) => (Date.parse(b.message.created_at) || 0) - (Date.parse(a.message.created_at) || 0) || b.index - a.index)
+    .slice(0, 5);
   const card = document.createElement("div");
   card.className = "card";
   const activePanel = detailPanels.get(d.device_id) ?? "history";
@@ -126,7 +142,7 @@ function buildCard(d) {
       <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
       <button type="button" class="icon-button danger" data-act="del" aria-label="Delete device" title="Delete device">${ICONS.trash}</button>
     </div>
-    <div class="muted recent-messages">${(d.messages||[]).slice(-5).reverse().map(m=>`${esc(m.text)} — ${esc({pending:"Pending",delivered:"Delivered to client",confirmed:"Confirmed (OK)",expired:"Expired"}[m.status]||m.status)}`).join("<br>")}</div>
+    <div class="muted recent-messages"${recentMessages.length ? ' tabindex="0"' : ""}></div>
     <div class="detail-tabs" role="tablist" aria-label="Device details">
       <button type="button" class="detail-tab" role="tab" id="history-tab" aria-controls="history-panel" data-panel="history">History</button>
       <button type="button" class="detail-tab" role="tab" id="config-tab" aria-controls="config-panel" data-panel="config">Config</button>
@@ -152,6 +168,12 @@ function buildCard(d) {
       <span class="muted action-help">Windows override the limit. Use 16:00-20:00, comma-separated for multiple. 0 = blocked.</span>
     </div>
     </section>`;
+  if (recentMessages.length) {
+    const latestMessage = recentMessages[0].message;
+    const recentMessageElement = card.querySelector(".recent-messages");
+    recentMessageElement.textContent = messageSummary(latestMessage);
+    recentMessageElement.title = recentMessages.map(({message}) => messageSummary(message)).join("\n");
+  }
   detailPanels.set(d.device_id, activePanel);
   const detailTablist = card.querySelector(".detail-tabs");
   const setPanel = panel => {

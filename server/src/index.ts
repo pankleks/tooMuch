@@ -146,12 +146,13 @@ export async function buildApp(): Promise<FastifyInstance> {
             active_min: { type: "number", minimum: 0, maximum: 100000 },
             locked: { type: "boolean" },
             counting: { type: "boolean" },
+            client_version: { type: "string", minLength: 1, maxLength: 64 },
           },
         },
       },
     },
     async (req, reply) => {
-      const body = req.body as { device_id: string; date: string; active_min: number; locked?: boolean; counting?: boolean };
+      const body = req.body as { device_id: string; date: string; active_min: number; locked?: boolean; counting?: boolean; client_version?: string };
       const device = await deviceAuth(req, body.device_id);
       if (!device) return reply.code(401).send({ error: "unauthorized" });
       await recordHeartbeat(dataDir(), device, {
@@ -159,6 +160,7 @@ export async function buildApp(): Promise<FastifyInstance> {
         active_min: body.active_min,
         locked: body.locked ?? false,
         counting: body.counting,
+        client_version: body.client_version,
       });
       return reply.send({ ok: true, version: device.config.version, force_lock: device.config.force_lock });
     }
@@ -229,6 +231,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           device_id: d.device_id,
           name: d.name,
           last_seen: d.last_seen,
+          client_version: d.client_version ?? null,
           version: d.config.version,
           force_lock: d.config.force_lock,
           locked: d.locked ?? null,

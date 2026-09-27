@@ -20,11 +20,12 @@ public sealed class AgentConfig
 /// </summary>
 public sealed class Agent : IDisposable
 {
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly HttpClient _http;
     private readonly AgentConfig _cfg;
     private readonly Func<DateTime> utcNow;
     private readonly Action<Exception>? logPersistenceError;
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+    private static readonly string ClientVersion = GetClientVersion();
 
     public Policy Policy { get; private set; } = new();
     public double ActiveSeconds { get; private set; }
@@ -34,13 +35,22 @@ public sealed class Agent : IDisposable
         TimeZoneInfo.FindSystemTimeZoneById(Policy.TimeZone));
     public string TodayKey { get; private set; } = "";
 
-    public Agent(AgentConfig cfg, Func<DateTime>? utcNow = null, Action<Exception>? logPersistenceError = null)
+    public Agent(AgentConfig cfg, Func<DateTime>? utcNow = null, Action<Exception>? logPersistenceError = null,
+        HttpMessageHandler? httpHandler = null)
     {
         _cfg = cfg;
+        _http = httpHandler is null ? new HttpClient() : new HttpClient(httpHandler);
+        _http.Timeout = TimeSpan.FromSeconds(10);
         this.utcNow = utcNow ?? (() => DateTime.UtcNow);
         this.logPersistenceError = logPersistenceError;
         Directory.CreateDirectory(_cfg.DataDir);
         LoadCache();
+    }
+
+    private static string GetClientVersion()
+    {
+        var version = typeof(Agent).Assembly.GetName().Version;
+        return version is null ? "unknown" : $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
     }
 
     public static string DateKey(DateTime d) => d.ToString("yyyy-MM-dd");
@@ -154,7 +164,7 @@ public sealed class Agent : IDisposable
         var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/heartbeat";
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Add("X-Device-Token", _cfg.Token);
-        req.Content = JsonContent.Create(new { device_id = _cfg.DeviceId, date = TodayKey, active_min = (double)ActiveMinToday, locked, counting });
+        req.Content = JsonContent.Create(new { device_id = _cfg.DeviceId, date = TodayKey, active_min = (double)ActiveMinToday, locked, counting, client_version = ClientVersion });
         using var res = await _http.SendAsync(req, ct);
         res.EnsureSuccessStatusCode();
     }
