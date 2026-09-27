@@ -18,15 +18,6 @@ internal static class Program
                 ApplicationConfiguration.Initialize();
                 Application.Run(new StatusTrayContext());
                 break;
-            case "--message":
-                if (args.Length != 3 || !uint.TryParse(args[2], out var timeout))
-                {
-                    Environment.ExitCode = 2;
-                    break;
-                }
-                ApplicationConfiguration.Initialize();
-                Environment.ExitCode = MessageDialog.Run(args[1], timeout);
-                break;
         }
     }
 
