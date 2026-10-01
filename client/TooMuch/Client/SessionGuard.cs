@@ -96,6 +96,22 @@ internal static class SessionGuard
 
     private static bool IsUnlocked(int id)
     {
+        return ReadSessionInfo(id).Flags == 1;
+    }
+
+    internal static bool IsCountingSession(int id, bool countOnlyActive, int idleThresholdSec)
+    {
+        if (!countOnlyActive) return true; // Caller already verified an unlocked child session.
+        var info = ReadSessionInfo(id);
+        return info.Flags == 1 && IsWithinIdleThreshold(info.Current, info.LastInput, idleThresholdSec);
+    }
+
+    internal static bool IsWithinIdleThreshold(long current, long lastInput, int thresholdSec) =>
+        lastInput > 0 && current >= lastInput && thresholdSec > 0 &&
+        (current - lastInput) / (double)TimeSpan.TicksPerSecond < thresholdSec;
+
+    private static InfoLevel1 ReadSessionInfo(int id)
+    {
         // WTSSessionInfoEx: Windows 10/11 flags 0=locked, 1=unlocked.
         if (!Query(IntPtr.Zero, id, 25, out var info, out var size))
             throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -104,7 +120,7 @@ internal static class SessionGuard
             if (size < Marshal.SizeOf<Info>()) throw new InvalidOperationException("Incomplete WTS session information.");
             var value = Marshal.PtrToStructure<Info>(info);
             if (value.Level != 1) throw new InvalidOperationException("Unsupported WTS information level.");
-            return value.Data.Flags == 1;
+            return value.Data;
         }
         finally { WTSFreeMemory(info); }
     }

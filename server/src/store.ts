@@ -174,6 +174,7 @@ export function applyConfigUpdate(device: DeviceFile, patch: Partial<ServerConfi
     device.config.days = patch.days as ServerConfig["days"];
   }
   if (typeof patch.force_lock === "boolean") device.config.force_lock = patch.force_lock;
+  if (typeof patch.count_only_active === "boolean") device.config.count_only_active = patch.count_only_active;
   if (typeof patch.idle_threshold_sec === "number") {
     if (!Number.isInteger(patch.idle_threshold_sec) || patch.idle_threshold_sec < 30 || patch.idle_threshold_sec > 3600)
       return { error: "idle_threshold_sec must be 30..3600" };

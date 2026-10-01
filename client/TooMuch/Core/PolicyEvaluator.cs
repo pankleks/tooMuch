@@ -28,7 +28,7 @@ public static class PolicyEvaluator
             return new Decision(State.Locked, Reason.Force, 0, "Locked by parent");
 
         var wd = IsoWeekday(localNow).ToString();
-        if (!policy.Days.TryGetValue(wd, out var day) || day is null)
+        if (policy.Days is null || !policy.Days.TryGetValue(wd, out var day) || !PolicyValidator.IsValidDay(day))
             return new Decision(State.Locked, Reason.ConfigMissing, 0, "Missing day configuration");
 
         if (day.Windows is { Count: > 0 })

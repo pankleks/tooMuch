@@ -13,7 +13,7 @@ public sealed record ChildStatus(
     {
         var decision = PolicyEvaluator.Evaluate(policy, localNow, (int)(usedSeconds / 60));
         var weekday = PolicyEvaluator.IsoWeekday(localNow).ToString();
-        if (!policy.Days.TryGetValue(weekday, out var day) || day is null)
+        if (policy.Days is null || !policy.Days.TryGetValue(weekday, out var day) || !PolicyValidator.IsValidDay(day))
             return new("Blocked", decision.Message, "Schedule", usedSeconds, null, null, updatedAtUtc);
 
         if (policy.ForceLock)

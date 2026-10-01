@@ -1,9 +1,11 @@
-const CACHE_NAME = "toomuch-admin-v1";
+const CACHE_NAME = "toomuch-admin-v2";
 const APP_SHELL = [
   "/admin",
   "/admin-static/admin.js",
   "/admin-static/device-status.js",
   "/admin-static/format.js",
+  "/admin-static/live-details.js",
+  "/admin-static/windows.js",
   "/admin-static/manifest.webmanifest",
   "/admin-static/icons/icon-192.png",
   "/admin-static/icons/icon-512.png",

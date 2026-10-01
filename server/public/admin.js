@@ -1,6 +1,7 @@
 import { formatMinutes, formatQuota, remainingMinutes, usagePercent } from "./format.js";
 import { deviceStatus } from "./device-status.js";
 import { parseWindows } from "./windows.js";
+import { updateLiveDetails } from "./live-details.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 // Lucide icons (ISC-licensed), embedded locally so the admin PWA works offline.
@@ -145,6 +146,13 @@ async function refresh(forceDetail = false, refocusDailyBonus = null) {
         if (target && selectedId() === target.deviceId) {
           document.querySelector(`[data-act="daily-bonus"][data-minutes="${target.minutes}"]`)?.focus();
         }
+      }
+    } else {
+      const device = devices.find(d => d.device_id === selectedId());
+      const card = document.querySelector("#list .device-detail");
+      if (device && card) {
+        updateLiveDetails(card, device);
+        card.querySelector('[data-act="lock"]').innerHTML = device.force_lock ? ICONS.unlock : ICONS.lock;
       }
     }
   } catch(e){

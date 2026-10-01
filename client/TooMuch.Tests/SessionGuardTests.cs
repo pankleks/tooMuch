@@ -6,6 +6,32 @@ namespace TooMuch.Tests;
 
 public class SessionGuardTests
 {
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(179, true)]
+    [InlineData(180, false)]
+    [InlineData(300, false)]
+    public void IdleThresholdUsesLastInputTime(int idleSeconds, bool expected)
+    {
+        var lastInput = DateTime.UtcNow.ToFileTimeUtc();
+        Assert.Equal(expected, SessionGuard.IsWithinIdleThreshold(
+            lastInput + idleSeconds * TimeSpan.TicksPerSecond, lastInput, 180));
+    }
+
+    [Fact]
+    public void InvalidSessionTimestampsDoNotCountAsActivity()
+    {
+        Assert.False(SessionGuard.IsWithinIdleThreshold(100, 0, 180));
+        Assert.False(SessionGuard.IsWithinIdleThreshold(100, 101, 180));
+        Assert.False(SessionGuard.IsWithinIdleThreshold(100, 100, 0));
+    }
+
+    [Fact]
+    public void DisabledActiveOnlyCountingDoesNotQueryNativeIdleInformation()
+    {
+        Assert.True(SessionGuard.IsCountingSession(-1, false, 180));
+    }
+
     [Fact]
     public void FailedLockQueryRetainsChildForEnforcementAndContinuesScanning()
     {

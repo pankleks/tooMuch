@@ -74,8 +74,12 @@ internal sealed class AgentService : ServiceBase
                     agent.TickDayRollover();
                     if (oldDay != agent.TodayKey) clock.Reset();
                     var sessions = sessionScan.Unlocked;
+                    var activeSessions = sessions.Any(id => {
+                        try { return SessionGuard.IsCountingSession(id, agent.Policy.CountOnlyActive, agent.Policy.IdleThresholdSec); }
+                        catch (Exception ex) { Log(ex); return false; }
+                    });
                     var decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
-                    var counting = sessions.Count > 0 && decision.State != State.Locked;
+                    var counting = activeSessions && decision.State != State.Locked;
                     var seconds = clock.Sample(watch.Elapsed, counting);
                     if (seconds > 0)
                     {
@@ -83,7 +87,7 @@ internal sealed class AgentService : ServiceBase
                     }
                     decision = PolicyEvaluator.Evaluate(agent.Policy, agent.LocalNow, agent.ActiveMinToday);
                     // A tick can reach the limit; publish the post-tick state.
-                    counting = sessions.Count > 0 && decision.State != State.Locked;
+                    counting = activeSessions && decision.State != State.Locked;
                     publishedStatus.Publish(ChildStatus.Create(agent.Policy, agent.LocalNow, agent.ActiveSeconds, DateTimeOffset.UtcNow));
                     if (decision.State == State.Locked)
                     {

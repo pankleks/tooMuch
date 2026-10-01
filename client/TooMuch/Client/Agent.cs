@@ -65,10 +65,15 @@ public sealed class Agent : IDisposable
             if (File.Exists(PolicyPath))
             {
                 var cached = JsonSerializer.Deserialize<Policy>(File.ReadAllText(PolicyPath), Json);
-                if (cached?.DeviceId == _cfg.DeviceId) Policy = cached;
+                PolicyValidator.Validate(cached, _cfg.DeviceId);
+                Policy = cached!;
             }
         }
-        catch (JsonException) { /* Missing policy fails closed in PolicyEvaluator. */ }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            // Keep the empty fail-closed policy when the cache cannot be trusted.
+            logPersistenceError?.Invoke(ex);
+        }
         TodayKey = DateKey(LocalNow);
         ReloadUsage();
     }
@@ -151,10 +156,8 @@ public sealed class Agent : IDisposable
         if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new UnauthorizedAccessException("bad device token");
         res.EnsureSuccessStatusCode();
         var p = await res.Content.ReadFromJsonAsync<Policy>(Json, ct);
-        if (p is null) return false;
-        if (p.DeviceId != _cfg.DeviceId) throw new InvalidDataException("Policy device identity mismatch.");
-        _ = TimeZoneInfo.FindSystemTimeZoneById(p.TimeZone);
-        Policy = p;
+        PolicyValidator.Validate(p, _cfg.DeviceId);
+        Policy = p!;
         SavePolicy();
         return true;
     }

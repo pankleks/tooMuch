@@ -4,7 +4,8 @@ public sealed record TimeWarning(string Key, int Minutes)
 {
     public static TimeWarning? Evaluate(Policy policy, DateTime now, double usedSeconds)
     {
-        if (policy.ForceLock || !policy.Days.TryGetValue(PolicyEvaluator.IsoWeekday(now).ToString(), out var day)) return null;
+        if (policy.ForceLock || policy.Days is null ||
+            !policy.Days.TryGetValue(PolicyEvaluator.IsoWeekday(now).ToString(), out var day) || !PolicyValidator.IsValidDay(day)) return null;
         double remaining;
         string rule;
         if (day.Windows.Count > 0)

@@ -22,6 +22,7 @@ import {
 import { validateDays } from "./types.js";
 import { localDate, recentDates, timeZone } from "./clock.js";
 import { randomUUID } from "node:crypto";
+import { createWriteLock } from "./write-lock.js";
 
 const PORT = Number(process.env.PORT ?? 3020);
 const TLS_CERT_FILE = process.env.TLS_CERT_FILE?.trim();
@@ -60,19 +61,21 @@ export async function buildApp(): Promise<FastifyInstance> {
     : undefined;
   const app = Fastify({ logger: false, ...(https ? { https } : {}) });
   timeZone();
-  // Serialize complete read-modify-write requests in this single server process.
-  // Atomic rename alone does not prevent a heartbeat from undoing an admin update.
-  let pending = Promise.resolve();
-  const releases = new WeakMap<FastifyRequest, () => void>();
-  app.addHook("onRequest", async req => {
-    if (!["POST", "PUT", "DELETE"].includes(req.method)) return;
-    const previous = pending;
-    pending = new Promise<void>(resolve => releases.set(req, resolve));
-    await previous;
-  });
-  app.addHook("onResponse", async req => {
-    releases.get(req)?.();
-    releases.delete(req);
+  const withWriteLock = createWriteLock();
+  // Handlers run after body parsing, validation and authentication hooks.
+  // Keep each device's complete read-modify-write atomic, without making
+  // slow request uploads or writes to other devices wait on a global lock.
+  app.addHook("onRoute", route => {
+    const methods = Array.isArray(route.method) ? route.method : [route.method];
+    if (!methods.some(method => ["POST", "PUT", "DELETE"].includes(method))) return;
+    const handler = route.handler;
+    route.handler = async function (req, reply) {
+      const params = req.params as { id?: string };
+      const body = req.body as { device_id?: string } | undefined;
+      // Registration needs its own queue because it allocates new identities.
+      const key = route.url === "/api/register" ? "register" : `device:${params.id ?? body?.device_id ?? ""}`;
+      return withWriteLock(key, async () => handler.call(this, req, reply));
+    };
   });
 
   await app.register(fastifyBasicAuth, {
@@ -255,13 +258,17 @@ export async function buildApp(): Promise<FastifyInstance> {
     async (req, reply) => {
       const device = await loadDevice(dataDir(), req.params.id);
       if (!device) return reply.code(404).send({ error: "not found" });
-      const patch = (req.body ?? {}) as { days?: unknown; force_lock?: unknown; idle_threshold_sec?: unknown };
+      const patch = (req.body ?? {}) as { days?: unknown; force_lock?: unknown; idle_threshold_sec?: unknown; count_only_active?: unknown };
       if (patch.days !== undefined) {
         const err = validateDays(patch.days);
         if (err) return reply.code(400).send({ error: err });
       }
       if (patch.force_lock !== undefined && typeof patch.force_lock !== "boolean")
         return reply.code(400).send({ error: "force_lock must be boolean" });
+      if (patch.count_only_active !== undefined && typeof patch.count_only_active !== "boolean")
+        return reply.code(400).send({ error: "count_only_active must be boolean" });
+      if (patch.idle_threshold_sec !== undefined && typeof patch.idle_threshold_sec !== "number")
+        return reply.code(400).send({ error: "idle_threshold_sec must be 30..3600" });
       const res = applyConfigUpdate(device, patch as never);
       if (res.error) return reply.code(400).send({ error: res.error });
       resnapshotToday(device);

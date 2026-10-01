@@ -21,6 +21,54 @@ describe("api", () => {
     app = await buildApp();
   });
 
+  it("updates and validates activity counting settings", async () => {
+    const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "idle-settings" } });
+    const { device_id, token } = reg.json();
+    const headers = { authorization: `Basic ${Buffer.from("admin:test-admin").toString("base64")}` };
+    const url = `/api/admin/devices/${device_id}`;
+    const updated = await app.inject({ method: "PUT", url, headers,
+      payload: { count_only_active: false, idle_threshold_sec: 60 } });
+    expect(updated.statusCode).toBe(200);
+    const config = await app.inject({ method: "GET", url: `/api/config/${device_id}`, headers: { "x-device-token": token } });
+    expect(config.json()).toMatchObject({ count_only_active: false, idle_threshold_sec: 60 });
+    for (const payload of [{ count_only_active: "false" }, { idle_threshold_sec: "60" }, { idle_threshold_sec: 29 }]) {
+      expect((await app.inject({ method: "PUT", url, headers, payload })).statusCode).toBe(400);
+    }
+  });
+
+  it("does not let an unfinished body block another write", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const parsing = new Promise<void>(resolve => { started = resolve; });
+    app.addHook("preParsing", async (req, _reply, payload) => {
+      if (req.headers["x-test-slow-body"]) {
+        started();
+        await gate;
+      }
+      return payload;
+    });
+    const slow = app.inject({ method: "POST", url: "/api/register",
+      headers: { "x-test-slow-body": "true" }, payload: { hostname: "slow" } });
+    // Start the lazy injection before waiting for its parsing hook.
+    const slowResponse = slow.then(response => response);
+    await parsing;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const response = await Promise.race([
+        app.inject({ method: "POST", url: "/api/register", payload: { hostname: "fast" } }),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => reject(new Error("write blocked by unfinished body")), 1000);
+        }),
+      ]);
+      expect(response.statusCode).toBe(200);
+    } finally {
+      clearTimeout(timer);
+      release();
+      await slowResponse;
+    }
+  });
+
   it("serves the responsive admin tabs and installable PWA shell", async () => {
     const page = await app.inject({ method: "GET", url: "/admin" });
     expect(page.statusCode).toBe(200);
