@@ -1,5 +1,6 @@
 import { formatMinutes, formatQuota, remainingMinutes } from "./format.js";
 import { deviceStatus } from "./device-status.js";
+import { parseWindows } from "./windows.js";
 
 const DAY_NAMES = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"};
 // Lucide icons (ISC-licensed), embedded locally so the admin PWA works offline.
@@ -360,14 +361,7 @@ function buildCard(d) {
     for (let n=1;n<=7;n++) {
       const lim = Number(card.querySelector(`input[data-day="${n}"][data-f="limit"]`).value);
       const wraw = card.querySelector(`input[data-day="${n}"][data-f="windows"]`).value.trim();
-      let windows = [];
-      if (wraw) {
-        for (const part of wraw.split(",")) {
-          const [from,to] = part.trim().split("-").map(s=>s.trim());
-          if (!from || !to) throw alert("bad window format");
-          windows.push({from,to});
-        }
-      }
+      const windows = parseWindows(wraw);
       days[String(n)] = {limit_min: lim, windows};
     }
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({days})});
