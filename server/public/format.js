@@ -16,26 +16,34 @@ export function formatQuota(value) {
   return match ? formatMinutes(Number(match[1])) : (quota || "?");
 }
 
-/** Minutes remaining for a daily limit, or null when no minute quota applies. */
-export function remainingMinutes(mode, quota, used) {
+function quotaMinutes(mode, quota) {
+  if (mode === "window") {
+    const windows = String(quota ?? "").split(",");
+    let total = 0;
+    for (const window of windows) {
+      const match = window.trim().match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+      if (!match) return null;
+      total += Math.max(0, Number(match[3]) * 60 + Number(match[4]) - Number(match[1]) * 60 - Number(match[2]));
+    }
+    return total;
+  }
   if (mode !== "limit") return null;
   const match = /^(\d+)m$/.exec(String(quota ?? ""));
+  return match ? Number(match[1]) : null;
+}
+
+/** Minutes remaining against the daily limit or total window duration. */
+export function remainingMinutes(mode, quota, used) {
+  const limit = quotaMinutes(mode, quota);
   const usedMinutes = Number(used);
-  if (!match || !Number.isFinite(usedMinutes) || usedMinutes < 0) return null;
-  return Math.max(0, Math.floor(Number(match[1]) - usedMinutes));
+  if (limit === null || !Number.isFinite(usedMinutes) || usedMinutes < 0) return null;
+  return Math.max(0, Math.floor(limit - usedMinutes));
 }
 
 /** Usage percentage against the daily limit or total duration of all windows. */
 export function usagePercent(today) {
   if (!today) return 0;
-  let limit = parseInt(today.quota);
-  if (today.mode === "window") {
-    limit = String(today.quota ?? "").split(",").reduce((total, window) => {
-      const match = window.trim().match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
-      if (!match) return total;
-      return total + Math.max(0, Number(match[3]) * 60 + Number(match[4]) - Number(match[1]) * 60 - Number(match[2]));
-    }, 0);
-  }
+  const limit = quotaMinutes(today.mode, today.quota);
   if (!limit) return today.active_min > 0 ? 100 : 0;
   return Math.min(100, Math.max(0, Math.round(today.active_min / limit * 100)));
 }

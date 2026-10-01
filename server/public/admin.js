@@ -169,9 +169,7 @@ function buildCard(d) {
   const progressToday = today ?? {active_min:usedToday, mode:todayMode, quota:todayQuota};
   const remainingToday = remainingMinutes(todayMode, todayQuota, usedToday);
   const remainingLabel = remainingToday === null ? "—" : formatMinutes(remainingToday);
-  const remainingAriaLabel = onWindowDay
-    ? "Remaining time unavailable for window schedule"
-    : remainingToday === null ? "Remaining time unavailable" : `Remaining time: ${remainingLabel}`;
+  const remainingAriaLabel = remainingToday === null ? "Remaining time unavailable" : `Remaining time: ${remainingLabel}`;
   card.innerHTML = `
     <div class="row usage-row">
       <span class="usage-summary" title="Used today: ${formatMinutes(usedToday)}" aria-label="Used today: ${formatMinutes(usedToday)}"><strong>${formatMinutes(usedToday)}</strong></span>

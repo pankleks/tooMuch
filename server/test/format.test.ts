@@ -36,7 +36,10 @@ describe("admin duration formatting", () => {
     ["limit", "1440m", 23, 1417],
     ["limit", "30m", 30, 0],
     ["limit", "15m", 20, 0],
-    ["window", "16:00-20:00", 23, null],
+    ["window", "16:00-20:00", 23, 217],
+    ["window", "08:00-10:00,17:00-21:00", 46, 314],
+    ["window", "08:00-10:00", 130, 0],
+    ["window", "unknown", 20, null],
     ["limit", "unknown", 0, null],
   ])("calculates remaining daily-limit minutes for %s quota %s after %i used", (mode, quota, used, expected) => {
     expect(remainingMinutes(mode, quota, used)).toBe(expected);
