@@ -25,6 +25,21 @@ export function remainingMinutes(mode, quota, used) {
   return Math.max(0, Math.floor(Number(match[1]) - usedMinutes));
 }
 
+/** Usage percentage against the daily limit or total duration of all windows. */
+export function usagePercent(today) {
+  if (!today) return 0;
+  let limit = parseInt(today.quota);
+  if (today.mode === "window") {
+    limit = String(today.quota ?? "").split(",").reduce((total, window) => {
+      const match = window.trim().match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+      if (!match) return total;
+      return total + Math.max(0, Number(match[3]) * 60 + Number(match[4]) - Number(match[1]) * 60 - Number(match[2]));
+    }, 0);
+  }
+  if (!limit) return today.active_min > 0 ? 100 : 0;
+  return Math.min(100, Math.max(0, Math.round(today.active_min / limit * 100)));
+}
+
 /** Human-readable age for ISO timestamps from last_seen. */
 export function formatTimeAgo(value, now = Date.now()) {
   if (!value) return "never";

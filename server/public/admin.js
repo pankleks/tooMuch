@@ -1,4 +1,4 @@
-import { formatMinutes, formatQuota, remainingMinutes } from "./format.js";
+import { formatMinutes, formatQuota, remainingMinutes, usagePercent } from "./format.js";
 import { deviceStatus } from "./device-status.js";
 import { parseWindows } from "./windows.js";
 
@@ -373,9 +373,7 @@ function buildCard(d) {
 }
 
 function barWidth(today) {
-  if (!today || today.mode!=="limit") return today?50:0;
-  const lim = parseInt(today.quota); if(!lim) return today.active_min>0?100:0;
-  return Math.min(100, Math.round(today.active_min/lim*100));
+  return usagePercent(today);
 }
 function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
