@@ -179,7 +179,7 @@ function buildCard(d) {
     <div class="row action-row">
       <button type="button" class="icon-button" data-act="lock" aria-label="${lockLabel}" title="${lockLabel}">${d.force_lock?ICONS.unlock:ICONS.lock}</button>
       <button type="button" class="icon-button" data-act="message" aria-label="Send message to child" title="Send message to child">${ICONS.message}</button>
-      <button type="button" class="icon-button" data-act="daily-bonus" data-minutes="15" aria-label="Add 15m to today's daily limit" title="Add 15m to today's daily limit" ${onWindowDay?"disabled":""}>+15m</button>
+      <button type="button" class="icon-button" data-act="daily-bonus" data-minutes="15" aria-label="${onWindowDay ? "Extra time unavailable for window schedules" : "Add 15m to today's daily limit"}" title="${onWindowDay ? "Extra time applies only to daily limits, not time windows" : "Add 15m to today's daily limit"}" ${onWindowDay?"disabled":""}>+15m</button>
       <button type="button" class="icon-button" data-act="rename" aria-label="Rename device" title="Rename device">${ICONS.edit}</button>
       <button type="button" class="icon-button danger" data-act="del" aria-label="Delete device" title="Delete device">${ICONS.trash}</button>
     </div>
@@ -364,7 +364,7 @@ function buildCard(d) {
     }
     await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}`, {method:"PUT", headers:{"content-type":"application/json"}, body: JSON.stringify({days})});
     drafts.delete(d.device_id);
-    refresh();
+    await refresh(true);
     } catch(e) { document.getElementById("status").textContent = "Save failed: " + e.message; }
   };
   return card;
