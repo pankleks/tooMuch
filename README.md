@@ -63,6 +63,7 @@ For upgrades, extract the new release and run `install.ps1` again with the same 
 - Parents can add 15m, 30m, or 1h to a device's daily limit for today only; this never changes scheduled time windows.
 - Active time is counted for the selected child's unlocked Windows session, including watching videos without input. Locked sessions, sleep, and other accounts are excluded.
 - At the limit or outside an allowed window, the service disconnects the child's Windows session. Running apps remain open; signing in again disconnects the session while access is still blocked. This is not a Windows logon prohibition.
+- Five minutes after disconnecting the child, the service explicitly puts the whole PC to sleep, even if a game prevents idle sleep. Restoring access cancels pending sleep. Apps remain open; other signed-in users are affected too. Sleep failures are logged and retried after one minute. Wake timers are disabled for this suspend, but hardware/manual wakes remain possible; if access is still blocked after waking, sleep is requested again after five minutes.
 - A ten-minute warning before a daily limit or allowed-window end.
 - Parent-to-child Windows messages with delivery/confirmation status and a 15-minute default expiry.
 - Usage, connection status, recent messages, relative last-seen time, and compact durations such as `1h 30m` in the admin panel.

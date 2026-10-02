@@ -9,6 +9,7 @@ internal sealed class AgentService : ServiceBase
     private CancellationTokenSource? stop;
     private Task? worker;
     private int resetClock;
+    private int resumed;
 
     public AgentService()
     {
@@ -34,7 +35,12 @@ internal sealed class AgentService : ServiceBase
     }
     protected override void OnShutdown() => OnStop();
     protected override bool OnPowerEvent(PowerBroadcastStatus status)
-    { Interlocked.Exchange(ref resetClock, 1); return true; }
+    {
+        Interlocked.Exchange(ref resetClock, 1);
+        if (status is PowerBroadcastStatus.ResumeAutomatic or PowerBroadcastStatus.ResumeSuspend
+            or PowerBroadcastStatus.ResumeCritical) Interlocked.Exchange(ref resumed, 1);
+        return true;
+    }
     protected override void OnSessionChange(SessionChangeDescription change)
     { Interlocked.Exchange(ref resetClock, 1); }
 
@@ -57,6 +63,7 @@ internal sealed class AgentService : ServiceBase
             var publishedStatus = new StatusSnapshotStore();
             var pipeServer = Task.Run(() => StatusPipe.Serve(config.ChildSid, publishedStatus.Read, Log, ct));
             var clock = new UsageClock();
+            var blockedSleep = new BlockedSleep();
             var watch = Stopwatch.StartNew();
             Task network = Task.CompletedTask;
             var nextPoll = TimeSpan.Zero;
@@ -70,6 +77,7 @@ internal sealed class AgentService : ServiceBase
                 try
                 {
                     if (Interlocked.Exchange(ref resetClock, 0) != 0) clock.Reset();
+                    if (Interlocked.Exchange(ref resumed, 0) != 0) blockedSleep.RestartDelay(watch.Elapsed);
                     var oldDay = agent.TodayKey;
                     agent.TickDayRollover();
                     if (oldDay != agent.TodayKey) clock.Reset();
@@ -89,15 +97,19 @@ internal sealed class AgentService : ServiceBase
                     // A tick can reach the limit; publish the post-tick state.
                     counting = activeSessions && decision.State != State.Locked;
                     publishedStatus.Publish(ChildStatus.Create(agent.Policy, agent.LocalNow, agent.ActiveSeconds, DateTimeOffset.UtcNow));
+                    var disconnectedChild = false;
                     if (decision.State == State.Locked)
                     {
                         foreach (var session in sessionScan.ActiveChild)
                         {
-                            try { SessionGuard.Disconnect(session); }
+                            try { SessionGuard.Disconnect(session); disconnectedChild = true; }
                             catch (Exception ex) { Log(ex); }
                         }
                     }
                     else messages.Tick(agent, sessions, ct);
+
+                    blockedSleep.Tick(watch.Elapsed, decision.State == State.Locked,
+                        disconnectedChild, SystemSleep.Sleep, Log);
 
                     // HTTP cannot delay session enforcement. Only one network operation at a time.
                     if (network.IsCompleted)
