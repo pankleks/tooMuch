@@ -99,11 +99,51 @@ internal static class SessionGuard
         return ReadSessionInfo(id).Flags == 1;
     }
 
-    internal static bool IsCountingSession(int id, bool countOnlyActive, int idleThresholdSec)
+    internal static bool IsCountingSession(int id, bool countOnlyActive, int idleThresholdSec,
+        Action<Exception>? log = null) =>
+        IsCountingSession(id, countOnlyActive, idleThresholdSec, ReadProtocol, ReadInputTimes, log ?? (_ => { }));
+
+    // Caller must first verify that this is an unlocked session belonging to the child.
+    internal static bool IsCountingSession(int id, bool countOnlyActive, int idleThresholdSec,
+        Func<int, ushort> readProtocol, Func<int, (long Current, long LastInput)> readInputTimes,
+        Action<Exception> log)
     {
-        if (!countOnlyActive) return true; // Caller already verified an unlocked child session.
+        if (!countOnlyActive) return true;
+        try
+        {
+            // WTS last-input timestamps are RDP data. On the physical console
+            // they can be zero or stale even while playing a game. Count unlocked
+            // local screen time, including videos, instead of treating it as idle.
+            if (readProtocol(id) == 0) return true;
+            var input = readInputTimes(id);
+            // Unknown activity must not silently provide unlimited screen time.
+            if (input.Current <= 0 || input.LastInput <= 0 || input.LastInput > input.Current) return true;
+            return IsWithinIdleThreshold(input.Current, input.LastInput, idleThresholdSec);
+        }
+        catch (Exception ex)
+        {
+            log(ex);
+            return true; // Identity and unlocked state were already verified by ScanSessions.
+        }
+    }
+
+    private static (long Current, long LastInput) ReadInputTimes(int id)
+    {
         var info = ReadSessionInfo(id);
-        return info.Flags == 1 && IsWithinIdleThreshold(info.Current, info.LastInput, idleThresholdSec);
+        return (info.Current, info.LastInput);
+    }
+
+    private static ushort ReadProtocol(int id)
+    {
+        // WTSClientProtocolType: 0=physical console, 2=RDP.
+        if (!Query(IntPtr.Zero, id, 16, out var buffer, out var size))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        try
+        {
+            if (size < sizeof(ushort)) throw new InvalidOperationException("Incomplete WTS protocol information.");
+            return unchecked((ushort)Marshal.ReadInt16(buffer));
+        }
+        finally { WTSFreeMemory(buffer); }
     }
 
     internal static bool IsWithinIdleThreshold(long current, long lastInput, int thresholdSec) =>
