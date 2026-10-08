@@ -10,7 +10,7 @@
     <AssemblyName>TooMuch</AssemblyName>
     <ApplicationIcon>..\..\assets\toomuch.ico</ApplicationIcon>
     <RootNamespace>TooMuch</RootNamespace>
-    <Version>0.5.15</Version>
+    <Version>0.5.16</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
