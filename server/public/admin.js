@@ -327,7 +327,7 @@ function buildCard(d) {
       await api(`/api/admin/devices/${encodeURIComponent(d.device_id)}/messages`, {
         method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({text})
       });
-      await refresh();
+      await refresh(true);
     } catch(e) { alert("Send failed: " + e.message); }
   };
   const renameButton = card.querySelector('[data-act="rename"]');

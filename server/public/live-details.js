@@ -30,4 +30,34 @@ export function updateLiveDetails(card, device) {
   const lockLabel = device.force_lock ? "Unlock device" : "Lock device now";
   lock.title = lockLabel;
   lock.setAttribute("aria-label", lockLabel);
+
+  const recent = card.querySelector(".recent-messages");
+  if (recent) {
+    const sorted = [...(device.messages ?? [])]
+      .map((message, index) => ({ message, index }))
+      .sort((a, b) => (Date.parse(b.message.created_at) || 0) - (Date.parse(a.message.created_at) || 0) || b.index - a.index)
+      .slice(0, 5);
+    if (!sorted.length) {
+      recent.textContent = "";
+      recent.title = "";
+      recent.tabIndex = -1;
+    } else {
+      recent.textContent = messageSummary(sorted[0].message);
+      recent.title = sorted.map(({ message }) => messageSummary(message)).join("\n");
+      recent.tabIndex = 0;
+    }
+  }
+}
+
+function messageStatusLabel(status) {
+  return { pending: "Pending", delivered: "Delivered to client", confirmed: "Confirmed (OK)", expired: "Expired" }[status] || status;
+}
+
+function messageSentAt(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown time" : new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function messageSummary(message) {
+  return `${messageSentAt(message.created_at)} — ${message.text} — ${messageStatusLabel(message.status)}`;
 }
