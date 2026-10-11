@@ -242,6 +242,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           today: d.usage[today] ?? null,
           today_mode: mode,
           today_bonus_min: bonusMin,
+          daily_bonus_log: d.daily_bonus_log ?? [],
           today_quota: snapshotQuota(day, mode, bonusMin),
           last7: days.map((date) => ({ date, ...(d.usage[date] ?? { active_min: 0, mode: null, quota: null }) })),
           config: d.config,
@@ -325,6 +326,9 @@ export async function buildApp(): Promise<FastifyInstance> {
         return reply.code(409).send({ error: "Extra time applies only to daily-limit schedules, not time windows." });
       device.daily_bonuses ??= {};
       device.daily_bonuses[today] = dailyBonusMin(device, today) + req.body.minutes;
+      device.daily_bonus_log ??= [];
+      device.daily_bonus_log.push({ created_at: new Date().toISOString(), date: today,
+        minutes: req.body.minutes, total_min: device.daily_bonuses[today], user: "admin", ip: req.ip });
       device.config.version += 1;
       resnapshotToday(device);
       await saveDevice(dataDir(), device);

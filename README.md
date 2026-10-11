@@ -61,6 +61,7 @@ For upgrades, extract the new release and run `install.ps1` again with the same 
 
 - Per-device weekday limits and allowed time windows, edited in the admin panel.
 - Parents can add 15m, 30m, or 1h to a device's daily limit for today only; this never changes scheduled time windows.
+- Successful extra-time grants are saved with the device in `daily_bonus_log` and shown under **History → Extra time log**: timestamp, target date, minutes added, resulting total bonus, admin account and connecting IP (a reverse proxy may appear instead of the browser). Logging starts after deploying this version; old grants cannot be reconstructed. The shared `admin` account does not identify a person. Deleting the device also deletes its log.
 - Active time is counted for the selected child's unlocked Windows session, including watching videos without input. Locked sessions, sleep, and other accounts are excluded.
 - Local desktop sessions always count while unlocked: Windows WTS input timestamps are not reliable for local activity detection. `count_only_active` / `idle_threshold_sec` apply to remote sessions with valid input timestamps; unavailable idle data never silently stops counting an already verified unlocked child session.
 - At the limit or outside an allowed window, the service disconnects the child's Windows session. Running apps remain open; signing in again disconnects the session while access is still blocked. This is not a Windows logon prohibition.

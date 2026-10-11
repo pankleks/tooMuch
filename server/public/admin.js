@@ -200,6 +200,10 @@ function buildCard(d) {
     <table class="responsive-table history-table"><thead><tr><th scope="col">Date</th><th scope="col">Mode</th><th scope="col">Quota</th><th scope="col">Used</th></tr></thead><tbody>
     ${d.last7.map(x=>`<tr><td><span class="mobile-label">Date</span>${esc(x.date)}</td><td><span class="mobile-label">Mode</span>${esc(x.mode??"-")}</td><td><span class="mobile-label">Quota</span>${esc(formatQuota(x.quota??"-"))}</td><td><span class="mobile-label">Used</span>${formatMinutes(x.active_min)}</td></tr>`).join("")}
     </tbody></table>
+    <details><summary>Extra time log (${(d.daily_bonus_log || []).length})</summary>
+      <p class="muted">Recorded since logging was enabled. IP is the connecting address (may be a proxy); the shared admin account does not identify a person.</p>
+      <ul>${(d.daily_bonus_log || []).slice().reverse().map(entry => `<li>${esc(new Date(entry.created_at).toLocaleString())} — ${esc(entry.date)}: +${esc(formatMinutes(entry.minutes))}, total bonus ${esc(formatMinutes(entry.total_min))} — ${esc(entry.user)} (${esc(entry.ip)})</li>`).join("")}</ul>
+    </details>
     </section>
     <section class="detail-panel" id="config-panel" role="tabpanel" aria-labelledby="config-tab" tabindex="0" data-panel-content="config">
     <table class="responsive-table schedule-table"><thead><tr><th scope="col">Day</th><th scope="col">Limit [min]</th><th scope="col">Windows</th><th scope="col">Mode</th></tr></thead><tbody>

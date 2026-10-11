@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "../src/index.js";
@@ -320,6 +320,24 @@ describe("api", () => {
     expect(device.today_quota).toBe("165m");
     expect(device.today.quota).toBe("165m");
     expect(device.config.days[weekdayOf(today)].limit_min).toBe(120);
+    expect(device.daily_bonus_log).toEqual([
+      { created_at: expect.any(String), date: today, minutes: 15, total_min: 15, user: "admin", ip: "127.0.0.1" },
+      { created_at: expect.any(String), date: today, minutes: 30, total_min: 45, user: "admin", ip: "127.0.0.1" },
+    ]);
+    expect(device.daily_bonus_log.every((entry: { created_at: string }) => Number.isFinite(Date.parse(entry.created_at)))).toBe(true);
+    expect(JSON.parse(readFileSync(join(dir, `${device_id}.json`), "utf8")).daily_bonus_log).toEqual(device.daily_bonus_log);
+    expect(policy.json()).not.toHaveProperty("daily_bonus_log");
+
+    const url = `/api/admin/devices/${device_id}/daily-bonus`;
+    expect((await app.inject({ method: "POST", url, payload: { minutes: 15 } })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers: auth, payload: { minutes: 10 } })).statusCode).toBe(400);
+    const responses = await Promise.all([15, 60].map(minutes => app.inject({ method: "POST", url,
+      headers: { ...auth, "x-forwarded-for": "fake-ip" }, remoteAddress: "192.0.2.10", payload: { minutes } })));
+    expect(responses.every(response => response.statusCode === 200)).toBe(true);
+    const saved = JSON.parse(readFileSync(join(dir, `${device_id}.json`), "utf8"));
+    expect(saved.daily_bonus_log).toHaveLength(4);
+    expect(saved.daily_bonus_log.slice(2).map((entry: { ip: string }) => entry.ip)).toEqual(["192.0.2.10", "192.0.2.10"]);
+    expect(saved.daily_bonus_log.at(-1).total_min).toBe(120);
   });
 
   it("daily bonus is rejected for a window-mode day and never alters its windows", async () => {
@@ -336,6 +354,7 @@ describe("api", () => {
     const overview = await app.inject({ method: "GET", url: "/api/admin/overview", headers: auth });
     const device = overview.json().devices[0];
     expect(device.today_mode).toBe("window");
+    expect(device.daily_bonus_log).toEqual([]);
     expect(device.today_bonus_min).toBe(0);
     expect(device.today_quota).toBe("16:00-20:00");
     expect(device.config.days[weekdayOf(today)].windows).toEqual([{ from: "16:00", to: "20:00" }]);
