@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using TooMuch.Core;
@@ -34,6 +35,7 @@ public sealed class Agent : IDisposable
     public DateTime LocalNow => TimeZoneInfo.ConvertTimeFromUtc(utcNow(),
         TimeZoneInfo.FindSystemTimeZoneById(Policy.TimeZone));
     public string TodayKey { get; private set; } = "";
+    private bool usageSynced;
 
     public Agent(AgentConfig cfg, Func<DateTime>? utcNow = null, Action<Exception>? logPersistenceError = null,
         HttpMessageHandler? httpHandler = null)
@@ -53,7 +55,7 @@ public sealed class Agent : IDisposable
         return version is null ? "unknown" : $"{version.Major}.{version.Minor}.{Math.Max(version.Build, 0)}";
     }
 
-    public static string DateKey(DateTime d) => d.ToString("yyyy-MM-dd");
+    public static string DateKey(DateTime d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private string PolicyPath => Path.Combine(_cfg.DataDir, "policy.json");
     private string UsagePath(string date) => Path.Combine(_cfg.DataDir, $"usage-{date}.json");
@@ -90,7 +92,12 @@ public sealed class Agent : IDisposable
         try
         {
             var tmp = UsagePath(TodayKey) + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(new { active_min = ActiveMinToday, active_seconds = ActiveSeconds }));
+            using (var file = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+            {
+                JsonSerializer.Serialize(file, new { active_min = ActiveMinToday, active_seconds = ActiveSeconds });
+                // Data must reach disk before the rename, or a power cut can leave an empty file.
+                file.Flush(flushToDisk: true);
+            }
             File.Move(tmp, UsagePath(TodayKey), overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -110,6 +117,13 @@ public sealed class Agent : IDisposable
             TodayKey = key;
             ActiveSeconds = 0;
             ReloadUsage();
+        }
+        // The local usage file can be lost (power cut, corruption); never count below the server.
+        var policy = Policy;
+        if (policy.DailyBonusDate == TodayKey && policy.TodayActiveMin * 60d > ActiveSeconds)
+        {
+            ActiveSeconds = policy.TodayActiveMin * 60d;
+            SaveUsage();
         }
     }
 
@@ -131,14 +145,6 @@ public sealed class Agent : IDisposable
         catch { }
     }
 
-    public void AddActiveMinute()
-    {
-        // Compatibility helper for whole-minute callers.
-        ReloadUsage();
-        ActiveSeconds += 60;
-        SaveUsage();
-    }
-
     public void AddSeconds(double seconds)
     {
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
@@ -148,7 +154,9 @@ public sealed class Agent : IDisposable
 
     public async Task<bool> PollConfigAsync(CancellationToken ct)
     {
-        var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/config/{_cfg.DeviceId}?v={Policy.Version}&tz={Uri.EscapeDataString(Policy.TimeZone)}&date={Uri.EscapeDataString(TodayKey)}";
+        // Until server usage has been merged once, request a full reply (v=0 never matches).
+        var version = usageSynced ? Policy.Version : 0;
+        var url = $"{_cfg.ServerUrl.TrimEnd('/')}/api/config/{_cfg.DeviceId}?v={version}&tz={Uri.EscapeDataString(Policy.TimeZone)}&date={Uri.EscapeDataString(TodayKey)}";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Add("X-Device-Token", _cfg.Token);
         using var res = await _http.SendAsync(req, ct);
@@ -159,6 +167,8 @@ public sealed class Agent : IDisposable
         PolicyValidator.Validate(p, _cfg.DeviceId);
         Policy = p!;
         SavePolicy();
+        // Merged by TickDayRollover on the service loop, the only usage writer.
+        usageSynced = true;
         return true;
     }
 

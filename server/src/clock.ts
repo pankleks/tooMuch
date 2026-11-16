@@ -1,7 +1,11 @@
+let checkedZone: string | undefined;
+
 export function timeZone(): string {
   const zone = process.env.TIME_ZONE ?? "Europe/Warsaw";
+  if (zone === checkedZone) return zone;
   // Reject an invalid deployment setting instead of silently changing the date.
   new Intl.DateTimeFormat("en", { timeZone: zone }).format();
+  checkedZone = zone;
   return zone;
 }
 

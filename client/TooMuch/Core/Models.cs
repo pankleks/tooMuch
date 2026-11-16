@@ -24,6 +24,8 @@ public sealed class Policy
     [JsonRequired, JsonPropertyName("count_only_active")] public bool CountOnlyActive { get; set; } = true;
     [JsonPropertyName("daily_bonus_date")] public string DailyBonusDate { get; set; } = "";
     [JsonPropertyName("daily_bonus_min")] public int DailyBonusMin { get; set; }
+    // Server's recorded usage for DailyBonusDate; restores local usage after file loss.
+    [JsonPropertyName("today_active_min")] public int TodayActiveMin { get; set; }
     [JsonRequired, JsonPropertyName("days")] public Dictionary<string, DayConfig> Days { get; set; } = new();
 }
 

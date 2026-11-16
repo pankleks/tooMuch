@@ -17,7 +17,8 @@ import {
   dailyBonusMin,
   resnapshotToday,
   snapshotQuota,
-  weekdayOf,
+  dayRule,
+  isDeviceId,
 } from "./store.js";
 import { validateDays } from "./types.js";
 import { localDate, recentDates, timeZone } from "./clock.js";
@@ -45,8 +46,8 @@ function adminAuthHash(u: string, p: string): boolean {
 }
 
 async function deviceAuth(req: FastifyRequest, deviceId: string): Promise<ReturnType<typeof loadDevice> extends Promise<infer T> ? T : never> {
-  const dir = dataDir();
-  const device = await loadDevice(dir, deviceId);
+  if (!isDeviceId(deviceId)) return null;
+  const device = await loadDevice(dataDir(), deviceId);
   if (!device) return null;
   const token = (req.headers["x-device-token"] as string) ?? "";
   if (token !== device.token) return null;
@@ -107,7 +108,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     async (req, reply) => {
       if (!allowAutoRegister()) return reply.code(403).send({ error: "auto-register disabled" });
       const { hostname } = req.body as { hostname: string };
-      const { device } = await registerDevice(dataDir(), hostname, { allowAutoRegister: true });
+      const { device } = await registerDevice(dataDir(), hostname);
       return reply.send({ device_id: device.device_id, token: device.token });
     }
   );
@@ -120,8 +121,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     const today = localDate();
     if (v === device.config.version && req.query.tz === timeZone() && (!req.query.date || req.query.date === today))
       return reply.code(304).send();
-    const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
-    const mode = day.windows.length > 0 ? "window" : "limit";
+    const { mode } = dayRule(device, today);
     return reply.send({
       device_id: device.device_id,
       time_zone: timeZone(),
@@ -132,6 +132,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       days: device.config.days,
       daily_bonus_date: today,
       daily_bonus_min: mode === "limit" ? dailyBonusMin(device, today) : 0,
+      // Lets a client restore usage after its local file was lost.
+      today_active_min: device.usage[today]?.active_min ?? 0,
     });
   });
 
@@ -144,7 +146,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           type: "object",
           required: ["device_id", "date", "active_min"],
           properties: {
-            device_id: { type: "string" },
+            device_id: { type: "string", pattern: "^[a-z0-9][a-z0-9-]*$" },
             date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
             active_min: { type: "number", minimum: 0, maximum: 100000 },
             locked: { type: "boolean" },
@@ -227,8 +229,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       time_zone: timeZone(),
       devices: devices.map((d) => {
         const today = days[0];
-        const day = d.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
-        const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
+        const { day, mode } = dayRule(d, today);
         const bonusMin = mode === "limit" ? dailyBonusMin(d, today) : 0;
         return {
           device_id: d.device_id,
@@ -321,8 +322,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       const device = await loadDevice(dataDir(), req.params.id);
       if (!device) return reply.code(404).send({ error: "not found" });
       const today = localDate();
-      const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
-      if (day.windows.length > 0)
+      if (dayRule(device, today).mode === "window")
         return reply.code(409).send({ error: "Extra time applies only to daily-limit schedules, not time windows." });
       device.daily_bonuses ??= {};
       device.daily_bonuses[today] = dailyBonusMin(device, today) + req.body.minutes;

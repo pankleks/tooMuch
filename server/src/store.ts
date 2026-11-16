@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { DeviceFile, ServerConfig, UsageEntry, defaultConfig, normalizeHostname } from "./types.js";
+import { DayConfig, DeviceFile, ServerConfig, UsageEntry, defaultConfig, normalizeHostname } from "./types.js";
 import { localDate } from "./clock.js";
 
 export function dataDir(): string {
@@ -14,7 +14,7 @@ export function distDir(): string {
 }
 
 function filePath(dir: string, deviceId: string): string {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(deviceId)) throw new Error("bad device id");
+  if (!isDeviceId(deviceId)) throw new Error("bad device id");
   return path.join(dir, `${deviceId}.json`);
 }
 
@@ -36,6 +36,13 @@ export async function saveDevice(dir: string, device: DeviceFile): Promise<void>
     if (bonusDates.length > 30) {
       const keep = new Set(bonusDates.slice(-30));
       for (const date of bonusDates) if (!keep.has(date)) delete device.daily_bonuses[date];
+    }
+  }
+  if (device.daily_bonus_log) {
+    const dates = [...new Set(device.daily_bonus_log.map(entry => entry.date))].sort();
+    if (dates.length > 30) {
+      const oldest = dates[dates.length - 30];
+      device.daily_bonus_log = device.daily_bonus_log.filter(entry => entry.date >= oldest);
     }
   }
   const tmp = path.join(dir, `.${device.device_id}.${randomBytes(12).toString("hex")}.tmp`);
@@ -88,33 +95,19 @@ export interface RegisterResult {
 }
 
 /** Auto-register: create default (no limits) device on first contact. */
-export async function registerDevice(
-  dir: string,
-  hostname: string,
-  opts?: { allowAutoRegister?: boolean }
-): Promise<RegisterResult> {
-  if (opts?.allowAutoRegister === false) throw Object.assign(new Error("auto-register disabled"), { statusCode: 403 });
+export async function registerDevice(dir: string, hostname: string): Promise<RegisterResult> {
   const base = normalizeHostname(hostname || "pc");
-  await ensureDir(dir);
-  const existing = await loadDevice(dir, base);
-  if (!existing) {
-    const device: DeviceFile = {
-      device_id: base,
-      name: hostname?.slice(0, 80) || base,
-      token: randomBytes(16).toString("hex"),
-      last_seen: new Date().toISOString(),
-      config: defaultConfig(),
-      usage: {},
-    };
-    await saveDevice(dir, device);
-    return { created: true, device };
+  const name = hostname?.slice(0, 80) || base;
+  // Collision: same hostname already exists -> never overwrite; try fresh suffixes.
+  let deviceId = base;
+  let suffix = "";
+  while (await loadDevice(dir, deviceId)) {
+    suffix = randomBytes(4).toString("hex");
+    deviceId = `${base}-${suffix}`;
   }
-  // collision: same hostname, device already exists -> do NOT overwrite, suggest suffix
-  const suffix = randomBytes(2).toString("hex");
-  const altId = `${base}-${suffix}`;
   const device: DeviceFile = {
-    device_id: altId,
-    name: `${hostname?.slice(0, 80) || base} (${suffix})`,
+    device_id: deviceId,
+    name: suffix ? `${name} (${suffix})` : name,
     token: randomBytes(16).toString("hex"),
     last_seen: new Date().toISOString(),
     config: defaultConfig(),
@@ -122,6 +115,16 @@ export async function registerDevice(
   };
   await saveDevice(dir, device);
   return { created: true, device };
+}
+
+export function isDeviceId(deviceId: string): boolean {
+  return /^[a-z0-9][a-z0-9-]*$/.test(deviceId);
+}
+
+/** The schedule for a date and whether it is window or daily-limit mode. */
+export function dayRule(device: DeviceFile, date: string): { day: DayConfig; mode: "limit" | "window" } {
+  const day = device.config.days[weekdayOf(date)] ?? { limit_min: 1440, windows: [] };
+  return { day, mode: day.windows.length > 0 ? "window" : "limit" };
 }
 
 export function dailyBonusMin(device: DeviceFile, date: string): number {
@@ -151,9 +154,7 @@ export async function recordHeartbeat(
   entry: { date: string; active_min: number; locked: boolean; counting?: boolean; client_version?: string }
 ): Promise<DeviceFile> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) throw Object.assign(new Error("bad date"), { statusCode: 400 });
-  const wd = weekdayOf(entry.date);
-  const day = device.config.days[wd] ?? { limit_min: 1440, windows: [] };
-  const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
+  const { day, mode } = dayRule(device, entry.date);
   const prev: UsageEntry | undefined = device.usage[entry.date];
   const active_min = Math.max(prev?.active_min ?? 0, Math.max(0, Math.floor(entry.active_min)));
   device.usage[entry.date] = { active_min, mode, quota: snapshotQuota(day, mode, dailyBonusMin(device, entry.date)) };
@@ -193,8 +194,7 @@ export function resnapshotToday(device: DeviceFile): void {
   const today = localDate();
   const entry = device.usage[today];
   if (!entry) return;
-  const day = device.config.days[weekdayOf(today)] ?? { limit_min: 1440, windows: [] };
-  const mode: "limit" | "window" = day.windows.length > 0 ? "window" : "limit";
+  const { day, mode } = dayRule(device, today);
   entry.mode = mode;
   entry.quota = snapshotQuota(day, mode, dailyBonusMin(device, today));
 }

@@ -15,6 +15,24 @@ public static class PolicyEvaluator
         return from <= now && now < to;
     }
 
+    /// <summary>
+    /// End of the window containing <paramref name="now"/>, extended across adjacent windows
+    /// (they do not disconnect the session at the shared boundary). Null outside all windows.
+    /// </summary>
+    public static TimeOnly? CurrentWindowEnd(DayConfig day, TimeOnly now)
+    {
+        var active = day.Windows.FirstOrDefault(w => IsInWindow(now, w));
+        if (active is null) return null;
+        var end = TimeOnly.Parse(active.To, System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var next in day.Windows.OrderBy(w => w.From, StringComparer.Ordinal))
+        {
+            var from = TimeOnly.Parse(next.From, System.Globalization.CultureInfo.InvariantCulture);
+            var to = TimeOnly.Parse(next.To, System.Globalization.CultureInfo.InvariantCulture);
+            if (from <= end && to > end) end = to;
+        }
+        return end;
+    }
+
     public static int EffectiveDailyLimitMin(Policy policy, DateTime localNow, DayConfig day)
     {
         if (day.Windows.Count > 0 || policy.DailyBonusDate != localNow.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture))

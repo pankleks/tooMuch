@@ -10,7 +10,7 @@ services:
       DATA_DIR: /data
       DIST_DIR: /data/dist
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      ALLOW_AUTO_REGISTER: "true"
+      ALLOW_AUTO_REGISTER: ${ALLOW_AUTO_REGISTER:-true}
       TLS_CERT_FILE: ${TLS_CERT_FILE:-}
       TLS_KEY_FILE: ${TLS_KEY_FILE:-}
     volumes:

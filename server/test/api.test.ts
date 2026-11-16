@@ -458,6 +458,23 @@ describe("api", () => {
     expect(noAuth.statusCode).toBe(401);
   });
 
+  it("rejects malformed device ids without a server error", async () => {
+    const config = await app.inject({ method: "GET", url: "/api/config/BAD!", headers: { "x-device-token": "x" } });
+    expect(config.statusCode).toBe(401);
+    const beat = await app.inject({ method: "POST", url: "/api/heartbeat", headers: { "x-device-token": "x" },
+      payload: { device_id: "../BAD", date: localDate(), active_min: 1 } });
+    expect(beat.statusCode).toBe(400);
+  });
+
+  it("returns today's server usage so a client can restore lost local usage", async () => {
+    const { device_id, token } = (await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "restore" } })).json();
+    const headers = { "x-device-token": token };
+    await app.inject({ method: "POST", url: "/api/heartbeat", headers,
+      payload: { device_id, date: localDate(), active_min: 42, locked: false } });
+    const config = await app.inject({ method: "GET", url: `/api/config/${device_id}`, headers });
+    expect(config.json()).toMatchObject({ daily_bonus_date: localDate(), today_active_min: 42 });
+  });
+
   it("config change re-snapshots today quota without new heartbeat", async () => {
     const reg = await app.inject({ method: "POST", url: "/api/register", payload: { hostname: "pc-quota" } });
     const { device_id, token } = reg.json();

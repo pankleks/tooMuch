@@ -21,17 +21,11 @@ public sealed record ChildStatus(
 
         if (day.Windows.Count > 0)
         {
-            var now = TimeOnly.FromDateTime(localNow);
-            var active = day.Windows.FirstOrDefault(w => PolicyEvaluator.IsInWindow(now, w));
-            if (active is null)
+            if (PolicyEvaluator.CurrentWindowEnd(day, TimeOnly.FromDateTime(localNow)) is not { } end)
                 return new("Blocked", "Outside allowed hours", "Allowed hours", usedSeconds, null, null, updatedAtUtc);
-
-            var end = TimeOnly.Parse(active.To);
-            foreach (var next in day.Windows.OrderBy(w => TimeOnly.Parse(w.From)))
-                if (TimeOnly.Parse(next.From) <= end && TimeOnly.Parse(next.To) > end)
-                    end = TimeOnly.Parse(next.To);
             return new("Available", "Within allowed hours", "Allowed hours", usedSeconds,
-                Math.Max(0, (end.ToTimeSpan() - localNow.TimeOfDay).TotalSeconds), end.ToString("HH:mm"), updatedAtUtc);
+                Math.Max(0, (end.ToTimeSpan() - localNow.TimeOfDay).TotalSeconds),
+                end.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), updatedAtUtc);
         }
 
         var limitMin = PolicyEvaluator.EffectiveDailyLimitMin(policy, localNow, day);
